@@ -1,6 +1,6 @@
 import 'dart:math' as math;
 
-import 'package:comic_editor/PanelElementModel.dart';
+import 'package:comic_editor/PanelModel/PanelElementModel.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
@@ -17,7 +17,7 @@ import 'package:pdf/widgets.dart' as pw;
 import 'package:device_info_plus/device_info_plus.dart';
 
 
-import 'Project.dart';
+import '../PanelModel/Project.dart';
 
 class FileExportService {
   static const String _appFolderName = 'ComicPanelEditor';

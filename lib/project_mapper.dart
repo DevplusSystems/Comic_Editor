@@ -1,8 +1,8 @@
 import 'dart:typed_data';
 import 'package:comic_editor/project_hive_model.dart';
 import 'package:flutter/material.dart';
-import 'Project.dart';
-import 'PanelElementModel.dart';
+import 'PanelModel/Project.dart';
+import 'PanelModel/PanelElementModel.dart';
 
 // Convert Project to Hive model
 ProjectHiveModel toHiveModel(Project project) {

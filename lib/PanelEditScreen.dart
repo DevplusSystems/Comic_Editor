@@ -8,9 +8,9 @@ import 'package:image_picker/image_picker.dart';
 import 'package:flutter/rendering.dart';
 import 'dart:ui' as ui;
 import 'dart:typed_data';
-import 'CharacterClipartPicker.dart';
-import 'GridPainter.dart';
-import 'PanelElementModel.dart';
+import 'ClipArt/CharacterClipartPicker.dart';
+import 'Resizeable/GridPainter.dart';
+import 'PanelModel/PanelElementModel.dart';
 import 'Resizeable/ResizableDraggable.dart';
 import 'package:flutter/services.dart';
 

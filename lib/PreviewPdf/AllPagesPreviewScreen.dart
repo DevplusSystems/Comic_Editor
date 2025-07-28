@@ -1,8 +1,8 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 
-import 'PanelLayoutEditorScreen.dart';
-import 'Project.dart';
+import '../PanelLayoutEditorScreen.dart';
+import '../PanelModel/Project.dart';
 import 'file_export_service.dart';
 
 class AllPagesPreviewScreen extends StatefulWidget {

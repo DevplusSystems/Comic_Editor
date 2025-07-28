@@ -4,13 +4,13 @@ import 'package:flutter/material.dart';
 import 'package:hive/hive.dart';
 import 'dart:math';
 
-import 'AllPagesPreviewScreen.dart';
-import 'GridPainter.dart';
-import 'PageMarginsPainter.dart';
+import 'Resizeable/GridPainter.dart';
+import 'PreviewPdf/PageMarginsPainter.dart';
 import 'PanelEditScreen.dart';
-import 'PanelElementModel.dart';
-import 'Project.dart';
-import 'file_export_service.dart';
+import 'PanelModel/PanelElementModel.dart';
+import 'PanelModel/Project.dart';
+import 'PreviewPdf/AllPagesPreviewScreen.dart';
+import 'PreviewPdf/file_export_service.dart';
 
 // PDF Page Format Constants
 class PDFPageFormat {

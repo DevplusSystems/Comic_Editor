@@ -9,7 +9,7 @@ import 'package:pdf/widgets.dart' as pw;
 import 'package:share_plus/share_plus.dart';
 
 import 'PanelLayoutEditorScreen.dart';
-import 'Project.dart';
+import 'PanelModel/Project.dart';
 import 'package:hive/hive.dart';
 
 
