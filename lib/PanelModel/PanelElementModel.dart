@@ -13,6 +13,9 @@ class PanelElementModel {
   final double? fontSize;
   final String? fontFamily;
   final bool locked; // ✅ added
+  final FontWeight? fontWeight; // NEW
+  final FontStyle? fontStyle;   // NEW
+
 
   const PanelElementModel({
     required this.id,
@@ -26,6 +29,9 @@ class PanelElementModel {
     this.color,
     this.fontSize,
     this.locked = false, // ✅ default value
+    this.fontWeight,  // NEW
+    this.fontStyle,   // NEW
+
   });
 
   PanelElementModel copyWith({
@@ -40,6 +46,8 @@ class PanelElementModel {
     double? fontSize,
     String? fontFamily,
     bool? locked, // ✅ added to copyWith
+    FontWeight? fontWeight,  // NEW
+    FontStyle? fontStyle,    // NEW
   }) {
     return PanelElementModel(
       id: id ?? this.id,
@@ -53,6 +61,57 @@ class PanelElementModel {
       fontSize: fontSize ?? this.fontSize,
       fontFamily: fontFamily ?? this.fontFamily,
       locked: locked ?? this.locked,
+      fontWeight: fontWeight ?? this.fontWeight,  // NEW
+      fontStyle: fontStyle ?? this.fontStyle,     // NEW
+    );
+  }
+  // Convert to Map for Hive storage
+  Map<String, dynamic> toMap() {
+    return {
+      'id': id,
+      'type': type,
+      'value': value,
+      'offset_dx': offset.dx,
+      'offset_dy': offset.dy,
+      'width': width,
+      'height': height,
+      'size_width': size?.width,
+      'size_height': size?.height,
+      'fontSize': fontSize,
+      'color': color?.value,
+      'fontFamily': fontFamily,
+      'fontWeight': fontWeight?.index,  // NEW
+      'fontStyle': fontStyle?.index,    // NEW
+    };
+  }
+
+  // Create from Map for Hive loading
+  factory PanelElementModel.fromMap(Map<String, dynamic> map) {
+    return PanelElementModel(
+      id: map['id'] ?? '',
+      type: map['type'] ?? '',
+      value: map['value'] ?? '',
+      offset: Offset(
+        (map['offset_dx'] ?? 0.0).toDouble(),
+        (map['offset_dy'] ?? 0.0).toDouble(),
+      ),
+      width: (map['width'] ?? 0.0).toDouble(),
+      height: (map['height'] ?? 0.0).toDouble(),
+      size: map['size_width'] != null && map['size_height'] != null
+          ? Size(
+        (map['size_width']).toDouble(),
+        (map['size_height']).toDouble(),
+      )
+          : null,
+      fontSize: map['fontSize']?.toDouble(),
+      color: map['color'] != null ? Color(map['color']) : null,
+      fontFamily: map['fontFamily'],
+      fontWeight: map['fontWeight'] != null
+          ? FontWeight.values[map['fontWeight']]
+          : null,  // NEW
+      fontStyle: map['fontStyle'] != null
+          ? FontStyle.values[map['fontStyle']]
+          : null,   // NEW
     );
   }
 

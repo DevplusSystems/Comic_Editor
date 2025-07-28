@@ -9,10 +9,19 @@ import 'package:flutter/rendering.dart';
 import 'dart:ui' as ui;
 import 'dart:typed_data';
 import 'ClipArt/CharacterClipartPicker.dart';
+import 'Draw/DrawingCanvas.dart';
+import 'Draw/DrawingElementPainter.dart';
+import 'Draw/DrawingPainter.dart';
+import 'Draw/DrawingToolsPanel.dart';
 import 'Resizeable/GridPainter.dart';
 import 'PanelModel/PanelElementModel.dart';
 import 'Resizeable/ResizableDraggable.dart';
 import 'package:flutter/services.dart';
+
+import 'SpeechDialog/BubbleEditDialog.dart';
+import 'SpeechDialog/SpeechBubbleComponents.dart';
+import 'SpeechDialog/SpeechBubbleEditDialog.dart';
+import 'TextEditorDialog/TextEditDialog.dart';
 
 class PanelEditScreen extends StatefulWidget {
   final ComicPanel panel;
@@ -32,9 +41,16 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
   late ComicPanel panel;
   List<GlobalKey<ResizableDraggableState>> elementKeys = [];
   List<PanelElementModel> currentElements = [];
-  bool isDrawing = false;
   Color selectedColor = Colors.black;
   Color _selectedBackgroundColor = Colors.white;
+
+  bool isDrawing = false;
+  Color drawSelectedColor = Colors.black;
+
+  double selectedBrushSize = 1.0;
+
+  DrawingTool currentTool = DrawingTool.pen;
+
   bool _isSaving = false;
   bool _isEditing = true;
 
@@ -77,10 +93,10 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
     currentElements = List.from(panel.elements);
     _selectedBackgroundColor = panel.backgroundColor;
 
-    print('Panel elements count: ${currentElements.length}'); // Debug print
+    print('Panel elements count: ${currentElements.length}');
     for (int i = 0; i < currentElements.length; i++) {
       print(
-          'Element $i: ${currentElements[i].type} - ${currentElements[i].value}'); // Debug print
+          'Element $i: ${currentElements[i].type} - ${currentElements[i].value}');
     }
 
     _initializeElements();
@@ -96,8 +112,7 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
   Widget _buildElementWidget(PanelElementModel element, int index) {
     Widget child;
 
-    print(
-        'Building element: ${element.type} with value: ${element.value}'); // Debug print
+    print('Building element: ${element.type} with value: ${element.value}');
 
     switch (element.type) {
       case 'clipart':
@@ -118,7 +133,6 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
           );
         } catch (e) {
           print('Error parsing clipart icon: $e');
-          // Fallback to a default icon
           child = SizedBox(
             width: element.width,
             height: element.height,
@@ -161,10 +175,16 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
                 fontSize: element.fontSize ?? 20,
                 color: element.color ?? Colors.black,
                 fontFamily: element.fontFamily,
+                fontWeight: element.fontWeight ?? FontWeight.normal,
+                fontStyle: element.fontStyle ?? FontStyle.normal,
               ),
             ),
           ),
         );
+        break;
+
+      case 'speech_bubble':
+        child = _buildSpeechBubble(element);
         break;
 
       case 'bubble':
@@ -213,6 +233,71 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
           ),
         );
         break;
+      case 'Draw':
+        final points = element.value.split(';').map((pair) {
+          final coords = pair.split(',');
+          return Offset(
+            double.tryParse(coords[0]) ?? 0,
+            double.tryParse(coords[1]) ?? 0,
+          );
+        }).toList();
+
+        final drawingWidget = CustomPaint(
+          painter: DrawingElementPainter(
+            points: points,
+            color: element.color ?? Colors.black,
+            strokeWidth: element.fontSize ?? 1.0, // 👈 use saved size
+          ),
+        );
+
+        final isSelected = selectedElementIndex == index;
+        final decoratedChild = Container(
+          decoration: BoxDecoration(
+            border:
+                isSelected ? Border.all(color: Colors.blue, width: 2) : null,
+          ),
+          child: drawingWidget,
+        );
+
+        if (_isEditing) {
+          return ResizableDraggable(
+            key: elementKeys[index],
+            size: Size(element.width, element.height),
+            initialTop: element.offset.dy,
+            initialLeft: element.offset.dx,
+            onPositionChanged: (position, size) {
+              if (mounted) {
+                setState(() {
+                  currentElements[index] = currentElements[index].copyWith(
+                    offset: position,
+                    size: size,
+                    width: size.width,
+                    height: size.height,
+                  );
+                });
+              }
+            },
+            child: GestureDetector(
+              onTap: () {
+                setState(() {
+                  selectedElementIndex = isSelected ? null : index;
+                });
+              },
+              onDoubleTap: () => _editElement(index),
+              child: decoratedChild,
+            ),
+          );
+        } else {
+          return Positioned(
+            top: element.offset.dy,
+            left: element.offset.dx,
+            child: SizedBox(
+              width: element.width,
+              height: element.height,
+              child: drawingWidget,
+            ),
+          );
+        }
 
       default:
         child = Container(
@@ -228,7 +313,6 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
         );
     }
 
-    // Ensure element has valid size
     final elementSize = Size(
       element.width > 0 ? element.width : 50,
       element.height > 0 ? element.height : 50,
@@ -252,16 +336,27 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
             });
           }
         },
-        child: Container(
-          decoration: BoxDecoration(
-            border: Border.all(
-              color: selectedElementIndex == index
-                  ? Colors.blue
-                  : Colors.transparent,
-              width: 2,
+        child: GestureDetector(
+          onTap: () {
+            setState(() {
+              selectedElementIndex =
+                  selectedElementIndex == index ? null : index;
+            });
+          },
+          onDoubleTap: () {
+            _editElement(index);
+          },
+          child: Container(
+            decoration: BoxDecoration(
+              border: Border.all(
+                color: selectedElementIndex == index
+                    ? Colors.blue
+                    : Colors.transparent,
+                width: 2,
+              ),
             ),
+            child: child,
           ),
-          child: child,
         ),
       );
     } else {
@@ -277,11 +372,214 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
     }
   }
 
+  Widget _buildSpeechBubble(PanelElementModel element) {
+    // Parse bubble properties from element data
+    final bubbleData = _parseBubbleData(element);
+
+    return CustomPaint(
+      size: Size(element.width, element.height),
+      painter: SpeechBubblePainter(
+        bubbleColor: bubbleData['bubbleColor'] ?? Colors.white,
+        borderColor: bubbleData['borderColor'] ?? Colors.black,
+        borderWidth: bubbleData['borderWidth'] ?? 2.0,
+        bubbleShape: bubbleData['bubbleShape'] ?? BubbleShape.oval,
+        tailPosition: bubbleData['tailPosition'] ?? TailPosition.bottomLeft,
+      ),
+      child: Container(
+        padding: EdgeInsets.all(bubbleData['padding'] ?? 12.0),
+        child: Center(
+          child: Text(
+            bubbleData['text'] ?? element.value,
+            style: TextStyle(
+              fontSize: bubbleData['fontSize'] ?? 16.0,
+              color: bubbleData['textColor'] ?? Colors.black,
+              fontFamily: bubbleData['fontFamily'] ?? 'Roboto',
+              fontWeight: bubbleData['fontWeight'] ?? FontWeight.normal,
+              fontStyle: bubbleData['fontStyle'] ?? FontStyle.normal,
+            ),
+            textAlign: TextAlign.center,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Map<String, dynamic> _parseBubbleData(PanelElementModel element) {
+    // Parse JSON-like data from element.value or use defaults
+    try {
+      // If element.value contains JSON data, parse it
+      // For now, we'll use a simple format or defaults
+      return {
+        'text': element.value.split('|')[0] ?? 'Speech',
+        'bubbleColor': element.color ?? Colors.white,
+        'borderColor': Colors.black,
+        'borderWidth': 2.0,
+        'bubbleShape': BubbleShape.oval,
+        'tailPosition': TailPosition.bottomLeft,
+        'fontSize': element.fontSize ?? 16.0,
+        'textColor': Colors.black,
+        'fontFamily': element.fontFamily ?? 'Roboto',
+        'fontWeight': element.fontWeight ?? FontWeight.normal,
+        'fontStyle': element.fontStyle ?? FontStyle.normal,
+        'padding': 12.0,
+      };
+    } catch (e) {
+      return {
+        'text': element.value,
+        'bubbleColor': Colors.white,
+        'borderColor': Colors.black,
+        'borderWidth': 2.0,
+        'bubbleShape': BubbleShape.oval,
+        'tailPosition': TailPosition.bottomLeft,
+        'fontSize': 16.0,
+        'textColor': Colors.black,
+        'fontFamily': 'Roboto',
+        'fontWeight': FontWeight.normal,
+        'fontStyle': FontStyle.normal,
+        'padding': 12.0,
+      };
+    }
+  }
+
+  void _editElement(int index) {
+    final element = currentElements[index];
+
+    switch (element.type) {
+      case 'speech_bubble':
+        _editSpeechBubble(index);
+        break;
+      case 'text':
+        _editTextElement(index);
+        break;
+      case 'bubble':
+        _editBubbleElement(index);
+        break;
+      default:
+        // Show generic edit options
+        break;
+    }
+  }
+
+  void _editSpeechBubble(int index) async {
+    final element = currentElements[index];
+    final bubbleData = _parseBubbleData(element);
+
+    final result = await showDialog<Map<String, dynamic>>(
+      context: context,
+      builder: (context) => SpeechBubbleEditDialog(
+        initialData: bubbleData,
+      ),
+    );
+
+    if (result != null) {
+      setState(() {
+        currentElements[index] = element.copyWith(
+          value: result['text'],
+          color: result['bubbleColor'],
+          fontSize: result['fontSize'],
+          fontFamily: result['fontFamily'],
+          fontWeight: result['fontWeight'],
+          fontStyle: result['fontStyle'],
+        );
+      });
+    }
+  }
+
+  void _editTextElement(int index) async {
+    final element = currentElements[index];
+
+    final result = await showDialog<Map<String, dynamic>>(
+      context: context,
+      builder: (context) => TextEditDialog(
+        initialText: element.value,
+        initialFontSize: element.fontSize ?? 20,
+        initialColor: element.color ?? Colors.black,
+        initialFontFamily: element.fontFamily ?? 'Roboto',
+        initialFontWeight: element.fontWeight ?? FontWeight.normal,
+        initialFontStyle: element.fontStyle ?? FontStyle.normal,
+      ),
+    );
+
+    if (result != null) {
+      setState(() {
+        currentElements[index] = element.copyWith(
+          value: result['text'],
+          fontSize: result['fontSize'],
+          color: result['color'],
+          fontFamily: result['fontFamily'],
+          fontWeight: result['fontWeight'],
+          fontStyle: result['fontStyle'],
+        );
+      });
+    }
+  }
+
+  void _editBubbleElement(int index) async {
+    final element = currentElements[index];
+
+    final result = await showDialog<Map<String, dynamic>>(
+      context: context,
+      builder: (context) => BubbleEditDialog(
+        initialText: element.value,
+        initialColor: element.color ?? Colors.blue,
+      ),
+    );
+
+    if (result != null) {
+      setState(() {
+        currentElements[index] = element.copyWith(
+          value: result['text'],
+          color: result['color'],
+        );
+      });
+    }
+  }
+
   void _addNewElement(PanelElementModel element) {
     setState(() {
       currentElements.add(element);
       elementKeys.add(GlobalKey<ResizableDraggableState>());
     });
+  }
+
+  void _addSpeechBubble() async {
+    final result = await showDialog<Map<String, dynamic>>(
+      context: context,
+      builder: (context) => SpeechBubbleEditDialog(
+        initialData: {
+          'text': 'Hello!',
+          'bubbleColor': Colors.white,
+          'borderColor': Colors.black,
+          'borderWidth': 2.0,
+          'bubbleShape': BubbleShape.oval,
+          'tailPosition': TailPosition.bottomLeft,
+          'fontSize': 16.0,
+          'textColor': Colors.black,
+          'fontFamily': 'Roboto',
+          'fontWeight': FontWeight.normal,
+          'fontStyle': FontStyle.normal,
+          'padding': 12.0,
+        },
+      ),
+    );
+
+    if (result != null) {
+      final newElement = PanelElementModel(
+        id: DateTime.now().millisecondsSinceEpoch.toString(),
+        type: 'speech_bubble',
+        value: result['text'],
+        offset: const Offset(50, 50),
+        width: 120,
+        height: 80,
+        size: const Size(120, 80),
+        color: result['bubbleColor'],
+        fontSize: result['fontSize'],
+        fontFamily: result['fontFamily'],
+        fontWeight: result['fontWeight'],
+        fontStyle: result['fontStyle'],
+      );
+      _addNewElement(newElement);
+    }
   }
 
   Future<Uint8List?> _capturePanelAsImage() async {
@@ -311,14 +609,29 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
             onPressed: _isSaving
                 ? null
                 : () {
-                    if (currentElements.isNotEmpty) {
-                      setState(() {
-                        currentElements.removeLast();
-                        elementKeys.removeLast();
-                      });
-                    }
-                  },
+              if (currentElements.isNotEmpty && elementKeys.isNotEmpty) {
+                setState(() {
+                  // Clear selection if last element is selected
+                  if (selectedElementIndex == currentElements.length - 1) {
+                    selectedElementIndex = null;
+                  }
+                  currentElements.removeLast();
+                  elementKeys.removeLast();
+                });
+              }
+            },
           ),
+          if (selectedElementIndex != null)
+            IconButton(
+              icon: const Icon(Icons.delete),
+              onPressed: () {
+                setState(() {
+                  currentElements.removeAt(selectedElementIndex!);
+                  elementKeys.removeAt(selectedElementIndex!);
+                  selectedElementIndex = null;
+                });
+              },
+            ),
           ElevatedButton(
             onPressed: _isSaving ? null : _savePanel,
             style: ElevatedButton.styleFrom(
@@ -345,11 +658,23 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
           Container(
             padding: const EdgeInsets.all(8),
             color: Colors.grey[200],
-            child: Text(
-              'Elements: ${currentElements.length} | Editing: $_isEditing',
-              style: const TextStyle(fontSize: 12),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  'Elements: ${currentElements.length} | Editing: $_isEditing',
+                  style: const TextStyle(fontSize: 12),
+                ),
+                if (selectedElementIndex != null)
+                  Text(
+                    'Selected: ${currentElements[selectedElementIndex!].type}',
+                    style: const TextStyle(fontSize: 12, color: Colors.blue),
+                  ),
+              ],
             ),
           ),
+
+          // Panel Canvas Area
           Expanded(
             child: RepaintBoundary(
               key: _panelContentKey,
@@ -359,16 +684,77 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
                 height: double.infinity,
                 child: Stack(
                   children: [
-                    // Show a grid for reference
+                    // Grid (optional)
                     if (_isEditing)
                       CustomPaint(
                         size: Size.infinite,
                         painter: GridPainter(),
                       ),
-                    // Elements
+
+                    // ✅ Drawing Canvas on top of grid
+                    if (isDrawing)
+                      Positioned.fill(
+                        child: DrawingCanvas(
+                            tool: currentTool,
+                            brushSize: selectedBrushSize,
+                            color: drawSelectedColor,
+                            onDrawingComplete: (points) {
+                              final nonZeroPoints = points
+                                  .where((p) => p != Offset.zero)
+                                  .toList();
+                              if (nonZeroPoints.isEmpty) {
+                                setState(() => isDrawing = false);
+                                return;
+                              }
+                              final minX = nonZeroPoints
+                                  .map((p) => p.dx)
+                                  .reduce((a, b) => a < b ? a : b);
+                              final minY = nonZeroPoints
+                                  .map((p) => p.dy)
+                                  .reduce((a, b) => a < b ? a : b);
+                              final maxX = nonZeroPoints
+                                  .map((p) => p.dx)
+                                  .reduce((a, b) => a > b ? a : b);
+                              final maxY = nonZeroPoints
+                                  .map((p) => p.dy)
+                                  .reduce((a, b) => a > b ? a : b);
+
+                              final boundingWidth =
+                                  (maxX - minX).clamp(10.0, double.infinity);
+                              final boundingHeight =
+                                  (maxY - minY).clamp(10.0, double.infinity);
+
+                              final normalizedPoints = points
+                                  .map((p) => p - Offset(minX, minY))
+                                  .toList();
+                              final drawingData = normalizedPoints
+                                  .map((e) => '${e.dx},${e.dy}')
+                                  .join(';');
+
+                              final newElement = PanelElementModel(
+                                id: DateTime.now()
+                                    .millisecondsSinceEpoch
+                                    .toString(),
+                                type: 'Draw',
+                                value: drawingData,
+                                offset: Offset(minX, minY),
+                                width: boundingWidth,
+                                height: boundingHeight,
+                                size: Size(boundingWidth, boundingHeight),
+                                color: drawSelectedColor,
+                                fontSize: selectedBrushSize, // 👈 store strokeWidth here
+                              );
+
+                              _addNewElement(newElement);
+                              setState(() => isDrawing = false);
+                            }),
+                      ),
+
+                    // All existing elements
                     for (int i = 0; i < currentElements.length; i++)
                       _buildElementWidget(currentElements[i], i),
-                    // Show message if no elements
+
+                    // Empty state message
                     if (currentElements.isEmpty)
                       const Center(
                         child: Text(
@@ -385,6 +771,8 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
               ),
             ),
           ),
+
+          // Drawing tools & panel controls
           _buildToolOptions(),
         ],
       ),
@@ -413,12 +801,62 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
                 }
               }
             }),
+            _toolButton(Icons.chat_bubble, 'Speech Bubble', _addSpeechBubble),
             _toolButton(Icons.bubble_chart, 'Bubble', _addBubble),
             _toolButton(Icons.text_fields, 'Text', _addTextBox),
-            _toolButton(Icons.draw, 'Draw', _toggleDrawing),
+            _toolButton(Icons.draw, 'Draw', () {
+              setState(() => isDrawing = true);
+              _showDrawingToolsPanel();
+            }),
           ],
         ),
       ),
+    );
+  }
+
+  void _showDrawingToolsPanel() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      // changed to white for better visibility
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (BuildContext context) {
+        return Padding(
+          padding: MediaQuery.of(context).viewInsets,
+          child: DrawingToolsPanel(
+            currentTool: currentTool,
+            currentColor: drawSelectedColor,
+            currentBrushSize: selectedBrushSize,
+            onToolChanged: (tool) {
+              if (mounted) {
+                setState(() => currentTool = tool);
+              }
+            },
+            onColorChanged: (color) {
+              if (mounted) {
+                setState(() => drawSelectedColor = color);
+              }
+            },
+            onBrushSizeChanged: (size) {
+              if (mounted) {
+                setState(() => selectedBrushSize = size);
+              }
+            },
+            onUndo: () {
+              // You can implement undo functionality here later
+            },
+            onClearAll: () {
+              // You can implement canvas clear logic here later
+            },
+            onClose: () {
+              Navigator.of(context).pop();
+            },
+          ),
+        );
+      },
     );
   }
 
@@ -443,109 +881,7 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
     );
   }
 
-  Widget _buildFloatingToolbar() {
-    if (selectedElementIndex == null) return SizedBox.shrink();
-    final element = currentElements[selectedElementIndex!];
-    final key = elementKeys[selectedElementIndex!];
-    final state = key.currentState;
-    if (state == null) return SizedBox.shrink();
-
-    final Offset toolbarPosition =
-        state.position.translate(state.size.width + 10, -40);
-
-    return Positioned(
-      top: toolbarPosition.dy.clamp(0.0, _screenHeight - 50),
-      left: toolbarPosition.dx.clamp(0.0, _screenWidth - 250),
-      child: Row(
-        children: [
-          IconButton(
-            icon: Icon(element.locked ? Icons.lock : Icons.lock_open),
-            onPressed: () {
-              setState(() {
-                currentElements[selectedElementIndex!] =
-                    element.copyWith(locked: !element.locked);
-              });
-            },
-          ),
-          IconButton(
-            icon: const Icon(Icons.edit),
-            onPressed: () => _editText(selectedElementIndex!),
-          ),
-          IconButton(
-            icon: const Icon(Icons.font_download),
-            onPressed: () => _changeFont(selectedElementIndex!),
-          ),
-          IconButton(
-            icon: const Icon(Icons.format_color_fill),
-            onPressed: () => _changeColor(selectedElementIndex!),
-          ),
-          IconButton(
-            icon: const Icon(Icons.delete),
-            onPressed: () {
-              setState(() {
-                currentElements.removeAt(selectedElementIndex!);
-                elementKeys.removeAt(selectedElementIndex!);
-                selectedElementIndex = null;
-              });
-            },
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _editText(int index) {
-    final controller =
-        TextEditingController(text: currentElements[index].value);
-    showDialog(
-      context: context,
-      builder: (_) => AlertDialog(
-        title: const Text('Edit Text'),
-        content: TextField(controller: controller),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Cancel')),
-          TextButton(
-            onPressed: () {
-              setState(() {
-                currentElements[index] =
-                    currentElements[index].copyWith(value: controller.text);
-              });
-              Navigator.pop(context);
-            },
-            child: const Text('Save'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _changeFont(int index) async {
-    // Reuse part of your existing _addTextBox font size & fontFamily dialog
-  }
-
-  void _changeColor(int index) async {
-    final current = currentElements[index];
-    Color? picked = await showDialog(
-      context: context,
-      builder: (_) => AlertDialog(
-        title: const Text('Pick Color'),
-        content: SingleChildScrollView(
-          child: BlockPicker(
-            pickerColor: current.color ?? Colors.black,
-            onColorChanged: (c) => Navigator.pop(context, c),
-          ),
-        ),
-      ),
-    );
-
-    if (picked != null) {
-      setState(() {
-        currentElements[index] = current.copyWith(color: picked);
-      });
-    }
-  }
+  // ... (keep all your existing methods like _pickBackgroundColor, _uploadImage, etc.)
 
   void _pickBackgroundColor() async {
     Color tempColor = _selectedBackgroundColor;
@@ -641,98 +977,15 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
   }
 
   void _addTextBox() async {
-    final textController = TextEditingController();
-    double fontSize = 20;
-    Color selectedColor = Colors.black;
-    String fontFamily = 'Roboto';
-
     final result = await showDialog<Map<String, dynamic>>(
       context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setState) => AlertDialog(
-          title: const Text('Enter Text'),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextField(
-                  controller: textController,
-                  decoration: const InputDecoration(labelText: 'Text'),
-                ),
-                const SizedBox(height: 16),
-                Row(
-                  children: [
-                    const Text("Font Size: "),
-                    Expanded(
-                      child: Slider(
-                        value: fontSize,
-                        min: 10,
-                        max: 60,
-                        divisions: 10,
-                        label: fontSize.round().toString(),
-                        onChanged: (value) => setState(() => fontSize = value),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                Row(
-                  children: [
-                    const Text("Font Color: "),
-                    const SizedBox(width: 8),
-                    GestureDetector(
-                      onTap: () async {
-                        Color? picked = await showDialog(
-                          context: context,
-                          builder: (context) => AlertDialog(
-                            title: const Text('Pick a Color'),
-                            content: SingleChildScrollView(
-                              child: BlockPicker(
-                                pickerColor: selectedColor,
-                                onColorChanged: (color) =>
-                                    Navigator.pop(context, color),
-                              ),
-                            ),
-                          ),
-                        );
-                        if (picked != null) {
-                          setState(() => selectedColor = picked);
-                        }
-                      },
-                      child: Container(
-                        width: 30,
-                        height: 30,
-                        decoration: BoxDecoration(
-                          color: selectedColor,
-                          border: Border.all(),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Cancel'),
-            ),
-            TextButton(
-              onPressed: () {
-                if (textController.text.trim().isNotEmpty) {
-                  Navigator.of(context).pop({
-                    'text': textController.text.trim(),
-                    'fontSize': fontSize,
-                    'color': selectedColor,
-                    'fontFamily': fontFamily,
-                  });
-                }
-              },
-              child: const Text('Add'),
-            ),
-          ],
-        ),
+      builder: (context) => TextEditDialog(
+        initialText: 'Enter text',
+        initialFontSize: 20,
+        initialColor: Colors.black,
+        initialFontFamily: 'Roboto',
+        initialFontWeight: FontWeight.normal,
+        initialFontStyle: FontStyle.normal,
       ),
     );
 
@@ -748,63 +1001,10 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
         fontSize: result['fontSize'],
         color: result['color'],
         fontFamily: result['fontFamily'],
+        fontWeight: result['fontWeight'],
+        fontStyle: result['fontStyle'],
       );
       _addNewElement(newElement);
-    }
-  }
-
-  void _toggleDrawing() {
-    setState(() => isDrawing = !isDrawing);
-    if (isDrawing) _showDrawingTools();
-  }
-
-  void _showDrawingTools() {
-    showModalBottomSheet(
-      context: context,
-      builder: (context) => Container(
-        height: 120,
-        padding: const EdgeInsets.all(12),
-        child: Column(
-          children: [
-            const Text('Drawing Tools'),
-            Row(
-              children: [
-                ElevatedButton(
-                  onPressed: () {
-                    // Clear drawing logic here
-                  },
-                  child: const Text('Clear'),
-                ),
-                const SizedBox(width: 10),
-                ElevatedButton(
-                  onPressed: _pickDrawingColor,
-                  child: const Text('Color'),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  void _pickDrawingColor() async {
-    Color? picked = await showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text("Pick Drawing Color"),
-        content: SingleChildScrollView(
-          child: BlockPicker(
-            pickerColor: selectedColor,
-            onColorChanged: (color) => Navigator.of(context).pop(color),
-          ),
-        ),
-      ),
-    );
-    if (picked != null) {
-      setState(() {
-        selectedColor = picked;
-      });
     }
   }
 
