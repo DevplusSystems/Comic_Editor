@@ -1,10 +1,13 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'dart:typed_data';
-
+import '../SpeechDialog/SpeechBubbleComponents.dart';
+import '../SpeechDialog/SpeechBubbleData.dart';
 class PanelElementModel {
   final String id;
-  final String type;
-  final String value;
+  final String type; // e.g., "text", "draw", "speech_bubble"
+  final String value; // for speech bubble: JSON-encoded SpeechBubbleData
   final double width;
   final double height;
   final Offset offset;
@@ -12,10 +15,9 @@ class PanelElementModel {
   final Color? color;
   final double? fontSize;
   final String? fontFamily;
-  final bool locked; // ✅ added
-  final FontWeight? fontWeight; // NEW
-  final FontStyle? fontStyle;   // NEW
-
+  final bool locked;
+  final FontWeight? fontWeight;
+  final FontStyle? fontStyle;
 
   const PanelElementModel({
     required this.id,
@@ -28,10 +30,9 @@ class PanelElementModel {
     this.fontFamily,
     this.color,
     this.fontSize,
-    this.locked = false, // ✅ default value
-    this.fontWeight,  // NEW
-    this.fontStyle,   // NEW
-
+    this.locked = false,
+    this.fontWeight,
+    this.fontStyle,
   });
 
   PanelElementModel copyWith({
@@ -45,9 +46,9 @@ class PanelElementModel {
     Color? color,
     double? fontSize,
     String? fontFamily,
-    bool? locked, // ✅ added to copyWith
-    FontWeight? fontWeight,  // NEW
-    FontStyle? fontStyle,    // NEW
+    bool? locked,
+    FontWeight? fontWeight,
+    FontStyle? fontStyle,
   }) {
     return PanelElementModel(
       id: id ?? this.id,
@@ -61,11 +62,11 @@ class PanelElementModel {
       fontSize: fontSize ?? this.fontSize,
       fontFamily: fontFamily ?? this.fontFamily,
       locked: locked ?? this.locked,
-      fontWeight: fontWeight ?? this.fontWeight,  // NEW
-      fontStyle: fontStyle ?? this.fontStyle,     // NEW
+      fontWeight: fontWeight ?? this.fontWeight,
+      fontStyle: fontStyle ?? this.fontStyle,
     );
   }
-  // Convert to Map for Hive storage
+
   Map<String, dynamic> toMap() {
     return {
       'id': id,
@@ -80,12 +81,12 @@ class PanelElementModel {
       'fontSize': fontSize,
       'color': color?.value,
       'fontFamily': fontFamily,
-      'fontWeight': fontWeight?.index,  // NEW
-      'fontStyle': fontStyle?.index,    // NEW
+      'locked': locked,
+      'fontWeight': fontWeight?.index,
+      'fontStyle': fontStyle?.index,
     };
   }
 
-  // Create from Map for Hive loading
   factory PanelElementModel.fromMap(Map<String, dynamic> map) {
     return PanelElementModel(
       id: map['id'] ?? '',
@@ -97,7 +98,7 @@ class PanelElementModel {
       ),
       width: (map['width'] ?? 0.0).toDouble(),
       height: (map['height'] ?? 0.0).toDouble(),
-      size: map['size_width'] != null && map['size_height'] != null
+      size: (map['size_width'] != null && map['size_height'] != null)
           ? Size(
         (map['size_width']).toDouble(),
         (map['size_height']).toDouble(),
@@ -106,54 +107,30 @@ class PanelElementModel {
       fontSize: map['fontSize']?.toDouble(),
       color: map['color'] != null ? Color(map['color']) : null,
       fontFamily: map['fontFamily'],
+      locked: map['locked'] ?? false,
       fontWeight: map['fontWeight'] != null
           ? FontWeight.values[map['fontWeight']]
-          : null,  // NEW
+          : null,
       fontStyle: map['fontStyle'] != null
           ? FontStyle.values[map['fontStyle']]
-          : null,   // NEW
+          : null,
     );
   }
 
-  @override
-  String toString() {
-    return 'PanelElementModel(id: $id, type: $type, value: $value, width: $width, height: $height, offset: $offset, color: $color, size: $size, fontSize: $fontSize, fontFamily: $fontFamily, locked: $locked)';
+  // If this is a speech bubble, decode its value
+  SpeechBubbleData? get speechBubbleData {
+    if (type != 'speech_bubble') return null;
+    try {
+      return SpeechBubbleData.fromMap(jsonDecode(value));
+    } catch (_) {
+      return null;
+    }
   }
 
   @override
-  bool operator ==(Object other) {
-    if (identical(this, other)) return true;
-    return other is PanelElementModel &&
-        other.id == id &&
-        other.type == type &&
-        other.value == value &&
-        other.width == width &&
-        other.height == height &&
-        other.offset == offset &&
-        other.color == color &&
-        other.size == size &&
-        other.fontSize == fontSize &&
-        other.fontFamily == fontFamily &&
-        other.locked == locked;
-  }
-
-  @override
-  int get hashCode {
-    return Object.hash(
-      id,
-      type,
-      value,
-      width,
-      height,
-      offset,
-      color,
-      size,
-      fontSize,
-      fontFamily,
-      locked,
-    );
-  }
+  String toString() => 'PanelElementModel(id: $id, type: $type)';
 }
+
 
 class ComicPanel {
   final String id;

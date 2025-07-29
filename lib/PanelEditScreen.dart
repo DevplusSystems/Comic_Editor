@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/cupertino.dart';
@@ -19,6 +20,7 @@ import 'package:flutter/services.dart';
 
 import 'SpeechDialog/BubbleEditDialog.dart';
 import 'SpeechDialog/SpeechBubbleComponents.dart';
+import 'SpeechDialog/SpeechBubbleData.dart';
 import 'SpeechDialog/SpeechBubbleEditDialog.dart';
 import 'TextEditorDialog/TextEditDialog.dart';
 
@@ -618,29 +620,34 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
 
 
   Widget _buildSpeechBubble(PanelElementModel element) {
-    // Parse bubble properties from element data
-    final bubbleData = _parseBubbleData(element);
+    final bubble = element.speechBubbleData;
+
+    if (bubble == null) {
+      return const SizedBox(); // fallback
+    }
+
+    print("Rendering bubble: shape=${bubble.bubbleShape}, tail=${bubble.tailPosition}");
 
     return CustomPaint(
       size: Size(element.width, element.height),
       painter: SpeechBubblePainter(
-        bubbleColor: bubbleData['bubbleColor'] ?? Colors.white,
-        borderColor: bubbleData['borderColor'] ?? Colors.black,
-        borderWidth: bubbleData['borderWidth'] ?? 2.0,
-        bubbleShape: bubbleData['bubbleShape'] ?? BubbleShape.oval,
-        tailPosition: bubbleData['tailPosition'] ?? TailPosition.bottomLeft,
+        bubbleColor: bubble.bubbleColor,
+        borderColor: bubble.borderColor,
+        borderWidth: bubble.borderWidth,
+        bubbleShape: bubble.bubbleShape,
+        tailPosition: bubble.tailPosition,
       ),
-      child: Container(
-        padding: EdgeInsets.all(bubbleData['padding'] ?? 12.0),
+      child: Padding(
+        padding: EdgeInsets.all(bubble.padding),
         child: Center(
           child: Text(
-            bubbleData['text'] ?? element.value,
+            bubble.text,
             style: TextStyle(
-              fontSize: bubbleData['fontSize'] ?? 16.0,
-              color: bubbleData['textColor'] ?? Colors.black,
-              fontFamily: bubbleData['fontFamily'] ?? 'Roboto',
-              fontWeight: bubbleData['fontWeight'] ?? FontWeight.normal,
-              fontStyle: bubbleData['fontStyle'] ?? FontStyle.normal,
+              fontSize: bubble.fontSize,
+              color: bubble.textColor,
+              fontFamily: bubble.fontFamily,
+              fontWeight: bubble.fontWeight,
+              fontStyle: bubble.fontStyle,
             ),
             textAlign: TextAlign.center,
           ),
@@ -650,25 +657,29 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
   }
 
   Map<String, dynamic> _parseBubbleData(PanelElementModel element) {
-    // Parse JSON-like data from element.value or use defaults
     try {
-      // If element.value contains JSON data, parse it
-      // For now, we'll use a simple format or defaults
+      final parsed = jsonDecode(element.value);
       return {
-        'text': element.value.split('|')[0] ?? 'Speech',
-        'bubbleColor': element.color ?? Colors.white,
-        'borderColor': Colors.black,
-        'borderWidth': 2.0,
-        'bubbleShape': BubbleShape.oval,
-        'tailPosition': TailPosition.bottomLeft,
-        'fontSize': element.fontSize ?? 16.0,
-        'textColor': Colors.black,
-        'fontFamily': element.fontFamily ?? 'Roboto',
-        'fontWeight': element.fontWeight ?? FontWeight.normal,
-        'fontStyle': element.fontStyle ?? FontStyle.normal,
-        'padding': 12.0,
+        'text': parsed['text'] ?? 'Speech',
+        'bubbleColor': Color(parsed['bubbleColor'] ?? Colors.white.value),
+        'borderColor': Color(parsed['borderColor'] ?? Colors.black.value),
+        'borderWidth': (parsed['borderWidth'] ?? 2.0).toDouble(),
+        'bubbleShape': BubbleShape.values[parsed['bubbleShape'] ?? 0],
+        'tailPosition': TailPosition.values[parsed['tailPosition'] ?? 0],
+        'fontSize': (parsed['fontSize'] ?? 16.0).toDouble(),
+        'textColor': Color(parsed['textColor'] ?? Colors.black.value),
+        'fontFamily': parsed['fontFamily'] ?? 'Roboto',
+        'fontWeight': parsed['fontWeight'] != null
+            ? FontWeight.values[parsed['fontWeight']]
+            : FontWeight.normal,
+        'fontStyle': parsed['fontStyle'] != null
+            ? FontStyle.values[parsed['fontStyle']]
+            : FontStyle.normal,
+        'padding': (parsed['padding'] ?? 12.0).toDouble(),
       };
     } catch (e) {
+      print("Error parsing bubble data: $e");
+
       return {
         'text': element.value,
         'bubbleColor': Colors.white,
@@ -707,24 +718,41 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
 
   void _editSpeechBubble(int index) async {
     final element = currentElements[index];
-    final bubbleData = _parseBubbleData(element);
+
+    // Try parsing existing bubble data from element.value
+    final Map<String, dynamic> initialData = _parseBubbleData(element);
 
     final result = await showDialog<Map<String, dynamic>>(
       context: context,
       builder: (context) => SpeechBubbleEditDialog(
-        initialData: bubbleData,
+        initialData: initialData,
       ),
     );
 
     if (result != null) {
+      final updatedBubble = SpeechBubbleData(
+        text: result['text'],
+        bubbleColor: result['bubbleColor'],
+        borderColor: result['borderColor'],
+        borderWidth: result['borderWidth'],
+        bubbleShape: result['bubbleShape'],
+        tailPosition: result['tailPosition'],
+        fontSize: result['fontSize'],
+        textColor: result['textColor'],
+        fontFamily: result['fontFamily'],
+        fontWeight: result['fontWeight'],
+        fontStyle: result['fontStyle'],
+        padding: result['padding'],
+      );
+
       setState(() {
         currentElements[index] = element.copyWith(
-          value: result['text'],
-          color: result['bubbleColor'],
-          fontSize: result['fontSize'],
-          fontFamily: result['fontFamily'],
-          fontWeight: result['fontWeight'],
-          fontStyle: result['fontStyle'],
+          value: jsonEncode(updatedBubble.toMap()),
+          color: updatedBubble.bubbleColor,
+          fontSize: updatedBubble.fontSize,
+          fontFamily: updatedBubble.fontFamily,
+          fontWeight: updatedBubble.fontWeight,
+          fontStyle: updatedBubble.fontStyle,
         );
       });
     }
@@ -809,20 +837,30 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
     );
 
     if (result != null) {
-      final newElement = PanelElementModel(
-        id: DateTime.now().millisecondsSinceEpoch.toString(),
-        type: 'speech_bubble',
-        value: result['text'],
-        offset: const Offset(50, 50),
-        width: 120,
-        height: 80,
-        size: const Size(120, 80),
-        color: result['bubbleColor'],
+      final bubble = SpeechBubbleData(
+        text: result['text'],
+        bubbleColor: result['bubbleColor'],
+        borderColor: result['borderColor'],
+        borderWidth: result['borderWidth'],
+        bubbleShape: result['bubbleShape'],
+        tailPosition: result['tailPosition'],
         fontSize: result['fontSize'],
+        textColor: result['textColor'],
         fontFamily: result['fontFamily'],
         fontWeight: result['fontWeight'],
         fontStyle: result['fontStyle'],
+        padding: result['padding'],
       );
+
+      final newElement = PanelElementModel(
+        id: DateTime.now().millisecondsSinceEpoch.toString(),
+        type: 'speech_bubble',
+        value: jsonEncode(bubble.toMap()), // 🧠 STORE AS JSON
+        offset: const Offset(50, 50),
+        width: 120,
+        height: 80,
+      );
+
       _addNewElement(newElement);
     }
   }
