@@ -131,7 +131,7 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
                   int.parse(element.value),
                   fontFamily: element.fontFamily ?? 'MaterialIcons',
                 ),
-                color: element.color ?? Colors.deepPurple,
+                color: element.color ?? Colors.yellow,
               ),
             ),
           );
@@ -143,7 +143,7 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
             child: Icon(
               Icons.star,
               size: element.height * 0.8,
-              color: element.color ?? Colors.deepPurple,
+              color: element.color ?? Colors.yellow,
             ),
           );
         }
@@ -1254,7 +1254,7 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
       width: 50,
       height: 50,
       size: const Size(50, 50),
-      color: Colors.deepPurple,
+      color: Colors.yellow,
     );
     _addNewElement(newElement);
   }
@@ -1268,7 +1268,7 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
       width: 80,
       height: 40,
       size: const Size(80, 40),
-      color: Colors.blue,
+      color: Colors.blue.shade500,
     );
     _addNewElement(newElement);
   }
