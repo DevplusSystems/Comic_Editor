@@ -11,7 +11,6 @@ import 'dart:typed_data';
 import 'ClipArt/CharacterClipartPicker.dart';
 import 'Draw/DrawingCanvas.dart';
 import 'Draw/DrawingElementPainter.dart';
-import 'Draw/DrawingPainter.dart';
 import 'Draw/DrawingToolsPanel.dart';
 import 'Resizeable/GridPainter.dart';
 import 'PanelModel/PanelElementModel.dart';
@@ -50,6 +49,9 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
   double selectedBrushSize = 1.0;
 
   DrawingTool currentTool = DrawingTool.pen;
+
+  String? _activeToolId;
+
 
   bool _isSaving = false;
   bool _isEditing = true;
@@ -167,12 +169,11 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
           width: element.width,
           height: element.height,
           child: FittedBox(
-            fit: BoxFit.contain,
-            alignment: Alignment.centerLeft,
+            alignment: Alignment.center,
             child: Text(
               element.value,
               style: TextStyle(
-                fontSize: element.fontSize ?? 20,
+                fontSize: element.fontSize ?? 10,
                 color: element.color ?? Colors.black,
                 fontFamily: element.fontFamily,
                 fontWeight: element.fontWeight ?? FontWeight.normal,
@@ -182,6 +183,24 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
           ),
         );
         break;
+
+    /*  case 'text':
+        child = SizedBox(
+          width: element.width,
+          height: element.height,
+          child: Text(
+            element.value,
+            style: TextStyle(
+              fontSize: element.fontSize ?? 10,
+              color: element.color ?? Colors.black,
+              fontFamily: element.fontFamily,
+              fontWeight: element.fontWeight ?? FontWeight.normal,
+              fontStyle: element.fontStyle ?? FontStyle.normal,
+            ),
+          ),
+        );
+        break;
+*/
 
       case 'speech_bubble':
         child = _buildSpeechBubble(element);
@@ -371,6 +390,232 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
       );
     }
   }
+
+  /*text tool bar at the top left*/
+
+  Widget _buildFloatingToolbox(PanelElementModel element) {
+    return Align(
+      alignment: Alignment.centerRight,
+      child: Padding(
+        padding: const EdgeInsets.only(right: 10),
+        child: Material(
+          elevation: 6,
+          borderRadius: BorderRadius.circular(8),
+          color: Colors.white,
+          child: Container(
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(8),
+              boxShadow: const [BoxShadow(color: Colors.black26, blurRadius: 4)],
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _toolIcon(
+                  id: 'color',
+                  icon: Icons.format_color_text,
+                  tooltip: 'Text Color',
+                  onTap: () => _changeTextColorById(element.id),
+                ),
+                _toolIcon(
+                  id: 'size',
+                  icon: Icons.format_size,
+                  tooltip: 'Font Size',
+                  onTap: () => _changeFontSizeById(element.id),
+                ),
+                _toolIcon(
+                  id: 'bold',
+                  icon: Icons.format_bold,
+                  tooltip: 'Bold',
+                  onTap: () => _toggleBoldById(element.id),
+                ),
+                _toolIcon(
+                  id: 'italic',
+                  icon: Icons.format_italic,
+                  tooltip: 'Italic',
+                  onTap: () => _toggleItalicById(element.id),
+                ),
+                _toolIcon(
+                  id: 'delete',
+                  icon: Icons.delete,
+                  tooltip: 'Delete',
+                  onTap: () => _deleteElementById(element.id),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _toolIcon({
+    required String id,
+    required IconData icon,
+    required String tooltip,
+    required VoidCallback onTap,
+  })
+  {
+    final isActive = _activeToolId == id;
+
+    return Container(
+      decoration: BoxDecoration(
+        color: isActive ? Colors.blue.withOpacity(0.2) : Colors.transparent,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: IconButton(
+        icon: Icon(
+          icon,
+          color: isActive ? Colors.blue : Colors.black,
+        ),
+        tooltip: tooltip,
+        onPressed: () {
+          setState(() => _activeToolId = id);
+          onTap();
+          // Reset highlight after some time if you want:
+          Future.delayed(const Duration(milliseconds: 400), () {
+            if (_activeToolId == id) {
+              setState(() => _activeToolId = null);
+            }
+          });
+        },
+      ),
+    );
+  }
+
+  void _changeTextColorById(String id) async {
+
+    print("Pressed Bold for index ${id}");
+
+    final index = currentElements.indexWhere((e) => e.id == id);
+    if (index == -1) return;
+
+    Color selectedColor = currentElements[index].color ?? Colors.black;
+
+    final pickedColor = await showDialog<Color>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text("Pick Text Color"),
+          content: BlockPicker(
+            pickerColor: selectedColor,
+            onColorChanged: (color) {
+              selectedColor = color;
+            },
+          ),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(context), child: const Text("Cancel")),
+            TextButton(
+                onPressed: () => Navigator.pop(context, selectedColor),
+                child: const Text("OK")),
+          ],
+        );
+      },
+    );
+
+    if (pickedColor != null) {
+      setState(() {
+        currentElements[index] =
+            currentElements[index].copyWith(color: pickedColor);
+      });
+    }
+  }
+
+  void _changeFontSizeById(String id) async {
+    final index = currentElements.indexWhere((e) => e.id == id);
+    if (index == -1) return;
+
+    double currentSize = currentElements[index].fontSize ?? 16;
+
+    final newSize = await showDialog<double>(
+      context: context,
+      builder: (context) {
+        double tempSize = currentSize;
+
+        return AlertDialog(
+          title: const Text("Set Font Size"),
+          content: StatefulBuilder(
+            builder: (context, setState) {
+              return Slider(
+                min: 8,
+                max: 72,
+                divisions: 64,
+                value: tempSize,
+                label: tempSize.toStringAsFixed(0),
+                onChanged: (value) {
+                  setState(() => tempSize = value);
+                },
+              );
+            },
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text("Cancel"),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(context, tempSize),
+              child: const Text("OK"),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (newSize != null) {
+      setState(() {
+        currentElements[index] =
+            currentElements[index].copyWith(fontSize: newSize);
+      });
+    }
+  }
+  void _toggleBoldById(String id) {
+    final index = currentElements.indexWhere((e) => e.id == id);
+    if (index == -1) return;
+
+    setState(() {
+      final currentWeight = currentElements[index].fontWeight;
+      final newWeight = currentWeight == FontWeight.bold
+          ? FontWeight.normal
+          : FontWeight.bold;
+      currentElements[index] =
+          currentElements[index].copyWith(fontWeight: newWeight);
+    });
+  }
+  void _toggleItalicById(String id) {
+    final index = currentElements.indexWhere((e) => e.id == id);
+    if (index == -1) return;
+
+    setState(() {
+      final currentStyle = currentElements[index].fontStyle;
+      final newStyle = currentStyle == FontStyle.italic
+          ? FontStyle.normal
+          : FontStyle.italic;
+      currentElements[index] =
+          currentElements[index].copyWith(fontStyle: newStyle);
+    });
+  }
+
+  void _deleteElementById(String id) {
+    final index = currentElements.indexWhere((e) => e.id == id);
+    if (index == -1) return;
+
+    setState(() {
+      currentElements.removeAt(index);
+      elementKeys.removeAt(index);
+      if (selectedElementIndex == index) {
+        selectedElementIndex = null;
+      } else if (selectedElementIndex != null &&
+          selectedElementIndex! > index) {
+        selectedElementIndex = selectedElementIndex! - 1;
+      }
+    });
+  }
+
+
+
 
   Widget _buildSpeechBubble(PanelElementModel element) {
     // Parse bubble properties from element data
@@ -609,17 +854,18 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
             onPressed: _isSaving
                 ? null
                 : () {
-              if (currentElements.isNotEmpty && elementKeys.isNotEmpty) {
-                setState(() {
-                  // Clear selection if last element is selected
-                  if (selectedElementIndex == currentElements.length - 1) {
-                    selectedElementIndex = null;
-                  }
-                  currentElements.removeLast();
-                  elementKeys.removeLast();
-                });
-              }
-            },
+                    if (currentElements.isNotEmpty && elementKeys.isNotEmpty) {
+                      setState(() {
+                        // Clear selection if last element is selected
+                        if (selectedElementIndex ==
+                            currentElements.length - 1) {
+                          selectedElementIndex = null;
+                        }
+                        currentElements.removeLast();
+                        elementKeys.removeLast();
+                      });
+                    }
+                  },
           ),
           if (selectedElementIndex != null)
             IconButton(
@@ -652,128 +898,141 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
           const SizedBox(width: 8),
         ],
       ),
-      body: Column(
+      body: Stack(
+        clipBehavior: Clip.none, // ✅ Allow floating panel overflow
         children: [
-          // Debug info
-          Container(
-            padding: const EdgeInsets.all(8),
-            color: Colors.grey[200],
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  'Elements: ${currentElements.length} | Editing: $_isEditing',
-                  style: const TextStyle(fontSize: 12),
-                ),
-                if (selectedElementIndex != null)
-                  Text(
-                    'Selected: ${currentElements[selectedElementIndex!].type}',
-                    style: const TextStyle(fontSize: 12, color: Colors.blue),
-                  ),
-              ],
-            ),
-          ),
-
-          // Panel Canvas Area
-          Expanded(
-            child: RepaintBoundary(
-              key: _panelContentKey,
-              child: Container(
-                color: _selectedBackgroundColor,
-                width: double.infinity,
-                height: double.infinity,
-                child: Stack(
+          Column(
+            children: [
+              // Debug info
+              Container(
+                padding: const EdgeInsets.all(8),
+                color: Colors.grey[200],
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    // Grid (optional)
-                    if (_isEditing)
-                      CustomPaint(
-                        size: Size.infinite,
-                        painter: GridPainter(),
-                      ),
-
-                    // ✅ Drawing Canvas on top of grid
-                    if (isDrawing)
-                      Positioned.fill(
-                        child: DrawingCanvas(
-                            tool: currentTool,
-                            brushSize: selectedBrushSize,
-                            color: drawSelectedColor,
-                            onDrawingComplete: (points) {
-                              final nonZeroPoints = points
-                                  .where((p) => p != Offset.zero)
-                                  .toList();
-                              if (nonZeroPoints.isEmpty) {
-                                setState(() => isDrawing = false);
-                                return;
-                              }
-                              final minX = nonZeroPoints
-                                  .map((p) => p.dx)
-                                  .reduce((a, b) => a < b ? a : b);
-                              final minY = nonZeroPoints
-                                  .map((p) => p.dy)
-                                  .reduce((a, b) => a < b ? a : b);
-                              final maxX = nonZeroPoints
-                                  .map((p) => p.dx)
-                                  .reduce((a, b) => a > b ? a : b);
-                              final maxY = nonZeroPoints
-                                  .map((p) => p.dy)
-                                  .reduce((a, b) => a > b ? a : b);
-
-                              final boundingWidth =
-                                  (maxX - minX).clamp(10.0, double.infinity);
-                              final boundingHeight =
-                                  (maxY - minY).clamp(10.0, double.infinity);
-
-                              final normalizedPoints = points
-                                  .map((p) => p - Offset(minX, minY))
-                                  .toList();
-                              final drawingData = normalizedPoints
-                                  .map((e) => '${e.dx},${e.dy}')
-                                  .join(';');
-
-                              final newElement = PanelElementModel(
-                                id: DateTime.now()
-                                    .millisecondsSinceEpoch
-                                    .toString(),
-                                type: 'Draw',
-                                value: drawingData,
-                                offset: Offset(minX, minY),
-                                width: boundingWidth,
-                                height: boundingHeight,
-                                size: Size(boundingWidth, boundingHeight),
-                                color: drawSelectedColor,
-                                fontSize: selectedBrushSize, // 👈 store strokeWidth here
-                              );
-
-                              _addNewElement(newElement);
-                              setState(() => isDrawing = false);
-                            }),
-                      ),
-
-                    // All existing elements
-                    for (int i = 0; i < currentElements.length; i++)
-                      _buildElementWidget(currentElements[i], i),
-
-                    // Empty state message
-                    if (currentElements.isEmpty)
-                      const Center(
-                        child: Text(
-                          'No elements added yet.\nUse the tools below to add content.',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            fontSize: 16,
-                            color: Colors.grey,
-                          ),
-                        ),
+                    Text(
+                      'Elements: ${currentElements.length} | Editing: $_isEditing',
+                      style: const TextStyle(fontSize: 12),
+                    ),
+                    if (selectedElementIndex != null)
+                      Text(
+                        'Selected: ${currentElements[selectedElementIndex!].type}',
+                        style:
+                            const TextStyle(fontSize: 12, color: Colors.blue),
                       ),
                   ],
                 ),
               ),
-            ),
+
+              // Panel Canvas Area
+              Expanded(
+                child: RepaintBoundary(
+                  key: _panelContentKey,
+                  child: Container(
+                    color: _selectedBackgroundColor,
+                    width: double.infinity,
+                    height: double.infinity,
+                    child: Stack(
+                      clipBehavior: Clip.none,
+                      // ✅ This enables click for Positioned children
+                      children: [
+                        // Grid (optional)
+                        if (_isEditing)
+                          CustomPaint(
+                            size: Size.infinite,
+                            painter: GridPainter(),
+                          ),
+                        // ✅ Drawing Canvas on top of grid
+                        if (isDrawing)
+                          Positioned.fill(
+                            child: DrawingCanvas(
+                                tool: currentTool,
+                                brushSize: selectedBrushSize,
+                                color: drawSelectedColor,
+                                onDrawingComplete: (points) {
+                                  final nonZeroPoints = points
+                                      .where((p) => p != Offset.zero)
+                                      .toList();
+                                  if (nonZeroPoints.isEmpty) {
+                                    setState(() => isDrawing = false);
+                                    return;
+                                  }
+                                  final minX = nonZeroPoints
+                                      .map((p) => p.dx)
+                                      .reduce((a, b) => a < b ? a : b);
+                                  final minY = nonZeroPoints
+                                      .map((p) => p.dy)
+                                      .reduce((a, b) => a < b ? a : b);
+                                  final maxX = nonZeroPoints
+                                      .map((p) => p.dx)
+                                      .reduce((a, b) => a > b ? a : b);
+                                  final maxY = nonZeroPoints
+                                      .map((p) => p.dy)
+                                      .reduce((a, b) => a > b ? a : b);
+
+                                  final boundingWidth = (maxX - minX)
+                                      .clamp(10.0, double.infinity);
+                                  final boundingHeight = (maxY - minY)
+                                      .clamp(10.0, double.infinity);
+
+                                  final normalizedPoints = points
+                                      .map((p) => p - Offset(minX, minY))
+                                      .toList();
+                                  final drawingData = normalizedPoints
+                                      .map((e) => '${e.dx},${e.dy}')
+                                      .join(';');
+
+                                  final newElement = PanelElementModel(
+                                    id: DateTime.now()
+                                        .millisecondsSinceEpoch
+                                        .toString(),
+                                    type: 'Draw',
+                                    value: drawingData,
+                                    offset: Offset(minX, minY),
+                                    width: boundingWidth,
+                                    height: boundingHeight,
+                                    size: Size(boundingWidth, boundingHeight),
+                                    color: drawSelectedColor,
+                                    fontSize:
+                                        selectedBrushSize, // 👈 store strokeWidth here
+                                  );
+
+                                  _addNewElement(newElement);
+                                  setState(() => isDrawing = false);
+                                }),
+                          ),
+
+                        // All existing elements
+                        for (int i = 0; i < currentElements.length; i++)
+                          _buildElementWidget(currentElements[i], i),
+
+                        // Empty state message
+                        if (currentElements.isEmpty)
+                          const Center(
+                            child: Text(
+                              'No elements added yet.\nUse the tools below to add content.',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                fontSize: 16,
+                                color: Colors.grey,
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+
+              // Footer toolbar
+              _buildToolOptions(),
+            ],
           ),
 
-          // Drawing tools & panel controls
-          _buildToolOptions(),
+          // ✅ Floating vertical toolbox ABOVE RepaintBoundary
+          if (selectedElementIndex != null &&
+              currentElements[selectedElementIndex!].type == 'text')
+            _buildFloatingToolbox(currentElements[selectedElementIndex!]),
         ],
       ),
     );
