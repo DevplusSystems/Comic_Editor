@@ -4,7 +4,7 @@ import 'package:flutter_colorpicker/flutter_colorpicker.dart';
 
 
 // Define your DrawingTool enum
-enum DrawingTool { pen, highlighter, eraser, line, rectangle, circle, arrow }
+enum DrawingTool { pen }
 
 class DrawingToolsPanel extends StatefulWidget {
   final DrawingTool currentTool;
@@ -223,7 +223,7 @@ class _DrawingToolsPanelState extends State<DrawingToolsPanel> {
     switch (tool) {
       case DrawingTool.pen:
         return Icons.edit;
-      case DrawingTool.highlighter:
+    /*  case DrawingTool.highlighter:
         return Icons.highlight;
       case DrawingTool.eraser:
         return Icons.cleaning_services;
@@ -234,7 +234,7 @@ class _DrawingToolsPanelState extends State<DrawingToolsPanel> {
       case DrawingTool.circle:
         return Icons.circle_outlined;
       case DrawingTool.arrow:
-        return Icons.arrow_forward;
+        return Icons.arrow_forward;*/
     }
   }
 
@@ -242,7 +242,7 @@ class _DrawingToolsPanelState extends State<DrawingToolsPanel> {
     switch (tool) {
       case DrawingTool.pen:
         return 'Pen';
-      case DrawingTool.highlighter:
+      /*case DrawingTool.highlighter:
         return 'Highlighter';
       case DrawingTool.eraser:
         return 'Eraser';
@@ -253,7 +253,7 @@ class _DrawingToolsPanelState extends State<DrawingToolsPanel> {
       case DrawingTool.circle:
         return 'Circle';
       case DrawingTool.arrow:
-        return 'Arrow';
+        return 'Arrow';*/
     }
   }
 

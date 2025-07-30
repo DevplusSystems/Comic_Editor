@@ -66,12 +66,12 @@ class _DrawingPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final paint = Paint()
-      ..color = (tool == DrawingTool.highlighter)
+      ..color = (tool == DrawingTool.pen)
           ? color.withOpacity(0.4)
           : color
       ..strokeWidth = brushSize
       ..strokeCap = StrokeCap.round
-      ..style = (tool == DrawingTool.eraser) ? PaintingStyle.stroke : PaintingStyle.stroke;
+      ..style = (tool == DrawingTool.pen) ? PaintingStyle.stroke : PaintingStyle.stroke;
 
     for (int i = 0; i < points.length - 1; i++) {
       if (points[i] != Offset.zero && points[i + 1] != Offset.zero) {
