@@ -73,9 +73,10 @@ class _PanelLayoutEditorScreenState extends State<PanelLayoutEditorScreen> {
   // PDF Page Settings
   String _selectedPageFormat = 'A4';
   bool _showPageMargins = true;
-  double _pageMargin = 20.0;
+  double _pageMargin = 10.0;
 
-  final GlobalKey _panelPreviewKey = GlobalKey();
+  late List<GlobalKey> _pageKeys;
+
 
 /*  @override
   void initState() {
@@ -1080,16 +1081,7 @@ class _PanelLayoutEditorScreenState extends State<PanelLayoutEditorScreen> {
                           margin: const EdgeInsets.symmetric(vertical: 14),
                           padding: const EdgeInsets.all(2),
                           decoration: BoxDecoration(
-                            color: Colors.white,
-                            border: Border.all(color: Colors.black, width: 2),
-                            borderRadius: BorderRadius.circular(4),
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.black.withOpacity(0.2),
-                                blurRadius: 8,
-                                offset: Offset(0, 4),
-                              ),
-                            ],
+                            color: Colors.grey[200],
                           ),
                           child: DragTarget<LayoutPanel>(
                             onAcceptWithDetails: (details) {
@@ -1552,8 +1544,7 @@ class _PanelLayoutEditorScreenState extends State<PanelLayoutEditorScreen> {
               fontWeight: FontWeight.bold,
             ),
           ),
-          const SizedBox(width: 16),
-          Row(
+         /* Row(
             children: [
               Checkbox(
                 value: _snapToGrid,
@@ -1565,7 +1556,7 @@ class _PanelLayoutEditorScreenState extends State<PanelLayoutEditorScreen> {
               ),
               Text('Snap to Grid', style: TextStyle(fontSize: 12)),
             ],
-          ),
+          ),*/
         ],
       ),
     );
@@ -1814,8 +1805,14 @@ class _PanelLayoutEditorScreenState extends State<PanelLayoutEditorScreen> {
 
       pdf.addPage(
         pw.Page(
+          pageFormat: PdfPageFormat.a4, // ✅ Set A4 explicitly
           build: (context) => pw.Center(
-            child: pw.Image(imageProvider),
+            child: pw.Image(
+              imageProvider,
+              fit: pw.BoxFit.cover, // or contain/fitHeight
+              width: PdfPageFormat.a4.width,
+              height: PdfPageFormat.a4.height,
+            ),
           ),
         ),
       );
@@ -1830,7 +1827,7 @@ class _PanelLayoutEditorScreenState extends State<PanelLayoutEditorScreen> {
 
 
 
-  Future<Uint8List> generatePdf() async {
+  /*Future<Uint8List> generatePdf() async {
     final pdf = pw.Document();
 
     pdf.addPage(
@@ -1842,7 +1839,7 @@ class _PanelLayoutEditorScreenState extends State<PanelLayoutEditorScreen> {
     );
 
     return pdf.save();
-  }
+  }*/
 }
 
 /*
