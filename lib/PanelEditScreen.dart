@@ -626,8 +626,6 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
       return const SizedBox(); // fallback
     }
 
-    print("Rendering bubble: shape=${bubble.bubbleShape}, tail=${bubble.tailPosition}");
-
     return CustomPaint(
       size: Size(element.width, element.height),
       painter: SpeechBubblePainter(
@@ -635,7 +633,6 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
         borderColor: bubble.borderColor,
         borderWidth: bubble.borderWidth,
         bubbleShape: bubble.bubbleShape,
-        tailPosition: bubble.tailPosition,
       ),
       child: Padding(
         padding: EdgeInsets.all(bubble.padding),
@@ -665,7 +662,6 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
         'borderColor': Color(parsed['borderColor'] ?? Colors.black.value),
         'borderWidth': (parsed['borderWidth'] ?? 2.0).toDouble(),
         'bubbleShape': BubbleShape.values[parsed['bubbleShape'] ?? 0],
-        'tailPosition': TailPosition.values[parsed['tailPosition'] ?? 0],
         'fontSize': (parsed['fontSize'] ?? 16.0).toDouble(),
         'textColor': Color(parsed['textColor'] ?? Colors.black.value),
         'fontFamily': parsed['fontFamily'] ?? 'Roboto',
@@ -686,7 +682,6 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
         'borderColor': Colors.black,
         'borderWidth': 2.0,
         'bubbleShape': BubbleShape.oval,
-        'tailPosition': TailPosition.bottomLeft,
         'fontSize': 16.0,
         'textColor': Colors.black,
         'fontFamily': 'Roboto',
@@ -736,7 +731,6 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
         borderColor: result['borderColor'],
         borderWidth: result['borderWidth'],
         bubbleShape: result['bubbleShape'],
-        tailPosition: result['tailPosition'],
         fontSize: result['fontSize'],
         textColor: result['textColor'],
         fontFamily: result['fontFamily'],
@@ -825,7 +819,6 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
           'borderColor': Colors.black,
           'borderWidth': 2.0,
           'bubbleShape': BubbleShape.oval,
-          'tailPosition': TailPosition.bottomLeft,
           'fontSize': 16.0,
           'textColor': Colors.black,
           'fontFamily': 'Roboto',
@@ -843,7 +836,6 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
         borderColor: result['borderColor'],
         borderWidth: result['borderWidth'],
         bubbleShape: result['bubbleShape'],
-        tailPosition: result['tailPosition'],
         fontSize: result['fontSize'],
         textColor: result['textColor'],
         fontFamily: result['fontFamily'],

@@ -1,37 +1,26 @@
+import 'dart:math' as Math;
+
 import 'package:flutter/material.dart';
 import 'dart:math' as math;
 
 enum BubbleShape {
   oval,
   rectangle,
-  cloud,
-  thought,
-  shout,
+  shout
 }
 
-enum TailPosition {
-  bottomLeft,
-  bottomRight,
-  topLeft,
-  topRight,
-  leftCenter,
-  rightCenter,
-  none,
-}
 
 class SpeechBubblePainter extends CustomPainter {
   final Color bubbleColor;
   final Color borderColor;
   final double borderWidth;
   final BubbleShape bubbleShape;
-  final TailPosition tailPosition;
 
   SpeechBubblePainter({
     required this.bubbleColor,
     required this.borderColor,
     required this.borderWidth,
     required this.bubbleShape,
-    required this.tailPosition,
   });
 
   @override
@@ -54,20 +43,9 @@ class SpeechBubblePainter extends CustomPainter {
       case BubbleShape.rectangle:
         _drawRectangleBubble(path, size);
         break;
-      case BubbleShape.cloud:
-        _drawCloudBubble(path, size);
-        break;
-      case BubbleShape.thought:
-        _drawThoughtBubble(path, size);
-        break;
       case BubbleShape.shout:
         _drawShoutBubble(path, size);
         break;
-    }
-
-    // Add tail if needed
-    if (tailPosition != TailPosition.none) {
-      _addTail(path, size);
     }
 
     canvas.drawPath(path, paint);
@@ -75,113 +53,167 @@ class SpeechBubblePainter extends CustomPainter {
   }
 
   void _drawOvalBubble(Path path, Size size) {
-    final rect = Rect.fromLTWH(0, 0, size.width, size.height * 0.8);
-    path.addOval(rect);
+    final double w = size.width;
+    final double h = size.height;
+    final double tailWidth = w * 0.18;  // width of tail
+    final double tailHeight = h * 0.25; // height of tail
+
+    final double bodyHeight = h - tailHeight;
+
+    // Start at top center of the oval
+    path.moveTo(w / 2, 0);
+
+    // Top-right curve
+    path.quadraticBezierTo(w, 0, w, bodyHeight / 2);
+
+    // Bottom-right curve
+    path.quadraticBezierTo(w, bodyHeight, w / 2, bodyHeight);
+
+    // Tail insertion (bottom-left)
+    path.lineTo(w * 0.35, bodyHeight);                  // approach tail
+    path.lineTo(w * 0.20, h);                           // tip of tail
+    path.lineTo(w * 0.25, bodyHeight);                  // back to body
+
+    // Bottom-left curve
+    path.quadraticBezierTo(0, bodyHeight, 0, bodyHeight / 2);
+
+    // Top-left curve
+    path.quadraticBezierTo(0, 0, w / 2, 0);
+
+    path.close();
   }
+
 
   void _drawRectangleBubble(Path path, Size size) {
-    final rect = Rect.fromLTWH(0, 0, size.width, size.height * 0.8);
-    path.addRRect(RRect.fromRectAndRadius(rect, const Radius.circular(12)));
+    const double borderRadius = 16.0;
+    const double tailWidth = 22.0;
+    const double tailHeight = 28.0;
+    const double tailInset = 28.0; // distance from left
+
+    final double bodyHeight = size.height - tailHeight;
+
+    // Start at top-left
+    path.moveTo(borderRadius, 0);
+    path.lineTo(size.width - borderRadius, 0);
+    path.quadraticBezierTo(size.width, 0, size.width, borderRadius);
+
+    // Right side
+    path.lineTo(size.width, bodyHeight - borderRadius);
+    path.quadraticBezierTo(size.width, bodyHeight, size.width - borderRadius, bodyHeight);
+
+    // Bottom line (from right to just before tail)
+    path.lineTo(tailInset + tailWidth, bodyHeight);
+
+    // Tail: skip the top side of the triangle (so it appears open at the top)
+    path.lineTo(tailInset + tailWidth / 2, size.height);
+    path.lineTo(tailInset, bodyHeight);
+
+    // Continue bottom line to bottom-left
+    path.lineTo(borderRadius, bodyHeight);
+    path.quadraticBezierTo(0, bodyHeight, 0, bodyHeight - borderRadius);
+
+    // Left side
+    path.lineTo(0, borderRadius);
+    path.quadraticBezierTo(0, 0, borderRadius, 0);
+
+    path.close();
   }
-
-  void _drawCloudBubble(Path path, Size size) {
-    final rect = Rect.fromLTWH(0, 0, size.width, size.height * 0.8);
-
-    // Create cloud-like shape with multiple circles
-    final centerX = rect.center.dx;
-    final centerY = rect.center.dy;
-    final radius = rect.width / 6;
-
-    // Main body
-    path.addOval(Rect.fromCenter(center: rect.center, width: rect.width * 0.8, height: rect.height * 0.6));
-
-    // Cloud bumps
-    path.addOval(Rect.fromCenter(center: Offset(centerX - radius, centerY - radius/2), width: radius * 2, height: radius * 2));
-    path.addOval(Rect.fromCenter(center: Offset(centerX + radius, centerY - radius/2), width: radius * 2, height: radius * 2));
-    path.addOval(Rect.fromCenter(center: Offset(centerX, centerY - radius), width: radius * 1.5, height: radius * 1.5));
-  }
-
-  void _drawThoughtBubble(Path path, Size size) {
-    final rect = Rect.fromLTWH(0, 0, size.width, size.height * 0.7);
-
-    // Main thought bubble (cloud-like)
-    _drawCloudBubble(path, Size(size.width, size.height * 0.7));
-
-    // Add small thought circles
-    final circle1 = Rect.fromCenter(
-      center: Offset(size.width * 0.2, size.height * 0.85),
-      width: size.width * 0.1,
-      height: size.width * 0.1,
-    );
-    final circle2 = Rect.fromCenter(
-      center: Offset(size.width * 0.1, size.height * 0.95),
-      width: size.width * 0.06,
-      height: size.width * 0.06,
-    );
-
-    path.addOval(circle1);
-    path.addOval(circle2);
-  }
-
   void _drawShoutBubble(Path path, Size size) {
-    final rect = Rect.fromLTWH(0, 0, size.width, size.height * 0.8);
+    final double w = size.width;
+    final double h = size.height;
 
-    // Create jagged/spiky border
-    final centerX = rect.center.dx;
-    final centerY = rect.center.dy;
-    final radiusX = rect.width / 2;
-    final radiusY = rect.height / 2;
+    // Approximate outer polygon points
+    final points = <Offset>[
+      Offset(w * 0.10, h * 0.30),
+      Offset(w * 0.15, h * 0.10),
+      Offset(w * 0.25, h * 0.28),
+      Offset(w * 0.35, h * 0.08),
+      Offset(w * 0.42, h * 0.25),
+      Offset(w * 0.52, h * 0.05),
+      Offset(w * 0.60, h * 0.22),
+      Offset(w * 0.70, h * 0.02),
+      Offset(w * 0.75, h * 0.20),
+      Offset(w * 0.88, h * 0.05),
+      Offset(w * 0.90, h * 0.25),
+      Offset(w * 0.98, h * 0.18),
+      Offset(w * 0.95, h * 0.38),
+      Offset(w,      h * 0.45),
+      Offset(w * 0.90, h * 0.52),
+      Offset(w * 0.95, h * 0.60),
+      Offset(w * 0.85, h * 0.65),
+      Offset(w * 0.98, h * 0.75),
+      Offset(w * 0.80, h * 0.78),
+      Offset(w * 0.90, h * 0.90),
+      Offset(w * 0.75, h * 0.88),
+      Offset(w * 0.78, h),
+      Offset(w * 0.65, h * 0.90),
+      Offset(w * 0.60, h * 0.98),
+      Offset(w * 0.52, h * 0.85),
+      Offset(w * 0.45, h),
+      Offset(w * 0.40, h * 0.83),
+      Offset(w * 0.30, h * 0.95),
+      Offset(w * 0.32, h * 0.75),
+      Offset(w * 0.25, h * 0.88),
+      Offset(w * 0.20, h * 0.75),
+      Offset(w * 0.12, h * 0.90),
+      Offset(w * 0.15, h * 0.70),
+      Offset(w * 0.05, h * 0.72),
+      Offset(w * 0.08, h * 0.60),
+      Offset(0,      h * 0.50),
+      Offset(w * 0.10, h * 0.45),
+      Offset(0,      h * 0.38),
+      Offset(w * 0.08, h * 0.32),
+    ];
 
-    path.moveTo(centerX + radiusX, centerY);
-
-    for (int i = 0; i < 16; i++) {
-      final angle = (i * 2 * math.pi) / 16;
-      final isSpike = i % 2 == 0;
-      final radiusMultiplier = isSpike ? 0.9 : 1.0;
-      final x = centerX + radiusX * radiusMultiplier * math.cos(angle);
-      final y = centerY + radiusY * radiusMultiplier * math.sin(angle);
-      path.lineTo(x, y);
+    path.moveTo(points[0].dx, points[0].dy);
+    for (int i = 1; i < points.length; i++) {
+      path.lineTo(points[i].dx, points[i].dy);
     }
 
     path.close();
   }
 
-  void _addTail(Path path, Size size) {
-    switch (tailPosition) {
-      case TailPosition.bottomLeft:
-        path.moveTo(size.width * 0.2, size.height * 0.8);
-        path.lineTo(size.width * 0.1, size.height);
-        path.lineTo(size.width * 0.3, size.height * 0.8);
-        break;
-      case TailPosition.bottomRight:
-        path.moveTo(size.width * 0.8, size.height * 0.8);
-        path.lineTo(size.width * 0.9, size.height);
-        path.lineTo(size.width * 0.7, size.height * 0.8);
-        break;
-      case TailPosition.topLeft:
-        path.moveTo(size.width * 0.2, size.height * 0.1);
-        path.lineTo(size.width * 0.1, 0);
-        path.lineTo(size.width * 0.3, size.height * 0.1);
-        break;
-      case TailPosition.topRight:
-        path.moveTo(size.width * 0.8, size.height * 0.1);
-        path.lineTo(size.width * 0.9, 0);
-        path.lineTo(size.width * 0.7, size.height * 0.1);
-        break;
-      case TailPosition.leftCenter:
-        path.moveTo(size.width * 0.1, size.height * 0.4);
-        path.lineTo(0, size.height * 0.5);
-        path.lineTo(size.width * 0.1, size.height * 0.6);
-        break;
-      case TailPosition.rightCenter:
-        path.moveTo(size.width * 0.9, size.height * 0.4);
-        path.lineTo(size.width, size.height * 0.5);
-        path.lineTo(size.width * 0.9, size.height * 0.6);
-        break;
-      case TailPosition.none:
-        break;
-    }
+
+/*
+  void _drawRectangleBubble(Path path, Size size) {
+    const double borderRadius = 16.0;
+    const double tailWidth = 20.0;
+    const double tailHeight = 20.0;
+    const double tailInset = 20.0;
+
+    final double bodyHeight = size.height - tailHeight;
+
+    // Start at top-left corner
+    path.moveTo(borderRadius, 0);
+
+    // Top line
+    path.lineTo(size.width - borderRadius, 0);
+    path.quadraticBezierTo(size.width, 0, size.width, borderRadius);
+
+    // Right side
+    path.lineTo(size.width, bodyHeight - borderRadius);
+    path.quadraticBezierTo(size.width, bodyHeight, size.width - borderRadius, bodyHeight);
+
+    // Bottom side to tail (right to left)
+    path.lineTo(tailInset + tailWidth, bodyHeight);
+
+    // Tail
+    path.lineTo(tailInset + tailWidth / 2, size.height);
+    path.lineTo(tailInset, bodyHeight);
+
+    // Continue bottom line
+    path.lineTo(borderRadius, bodyHeight);
+    path.quadraticBezierTo(0, bodyHeight, 0, bodyHeight - borderRadius);
+
+    // Left side
+    path.lineTo(0, borderRadius);
+    path.quadraticBezierTo(0, 0, borderRadius, 0);
+
+    path.close();
   }
+*/
+
+
 
   @override
   bool shouldRepaint(covariant CustomPainter oldDelegate) => true;

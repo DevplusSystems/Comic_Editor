@@ -23,7 +23,6 @@ class _SpeechBubbleEditDialogState extends State<SpeechBubbleEditDialog> {
   late double _fontSize;
   late double _borderWidth;
   late BubbleShape _bubbleShape;
-  late TailPosition _tailPosition;
   late String _fontFamily;
   late FontWeight _fontWeight;
   late FontStyle _fontStyle;
@@ -49,7 +48,6 @@ class _SpeechBubbleEditDialogState extends State<SpeechBubbleEditDialog> {
     _fontSize = widget.initialData['fontSize'];
     _borderWidth = widget.initialData['borderWidth'];
     _bubbleShape = widget.initialData['bubbleShape'];
-    _tailPosition = widget.initialData['tailPosition'];
     _fontFamily = widget.initialData['fontFamily'];
     _fontWeight = widget.initialData['fontWeight'];
     _fontStyle = widget.initialData['fontStyle'];
@@ -68,7 +66,7 @@ class _SpeechBubbleEditDialogState extends State<SpeechBubbleEditDialog> {
             children: [
               // Preview - FIXED to update in real-time
               Container(
-                height: 120,
+                height: 150,
                 width: 200,
                 margin: const EdgeInsets.only(bottom: 16),
                 child: CustomPaint(
@@ -78,7 +76,7 @@ class _SpeechBubbleEditDialogState extends State<SpeechBubbleEditDialog> {
                     borderColor: _borderColor,
                     borderWidth: _borderWidth,
                     bubbleShape: _bubbleShape,
-                    tailPosition: _tailPosition,
+
                   ),
                   child: Container(
                     padding: EdgeInsets.all(_padding),
@@ -128,24 +126,6 @@ class _SpeechBubbleEditDialogState extends State<SpeechBubbleEditDialog> {
                   );
                 }).toList(),
                 onChanged: (value) => setState(() => _bubbleShape = value!),
-              ),
-
-              const SizedBox(height: 16),
-
-              // Tail Position - FIXED
-              DropdownButtonFormField<TailPosition>(
-                value: _tailPosition,
-                decoration: const InputDecoration(
-                  labelText: 'Tail Position',
-                  border: OutlineInputBorder(),
-                ),
-                items: TailPosition.values.map((position) {
-                  return DropdownMenuItem(
-                    value: position,
-                    child: Text(_getTailPositionName(position)),
-                  );
-                }).toList(),
-                onChanged: (value) => setState(() => _tailPosition = value!),
               ),
 
               const SizedBox(height: 16),
@@ -310,7 +290,6 @@ class _SpeechBubbleEditDialogState extends State<SpeechBubbleEditDialog> {
               'fontSize': _fontSize,
               'borderWidth': _borderWidth,
               'bubbleShape': _bubbleShape,
-              'tailPosition': _tailPosition,
               'fontFamily': _fontFamily,
               'fontWeight': _fontWeight,
               'fontStyle': _fontStyle,
@@ -367,33 +346,11 @@ class _SpeechBubbleEditDialogState extends State<SpeechBubbleEditDialog> {
         return 'Oval';
       case BubbleShape.rectangle:
         return 'Rectangle';
-      case BubbleShape.cloud:
-        return 'Cloud';
-      case BubbleShape.thought:
-        return 'Thought';
       case BubbleShape.shout:
-        return 'Shout';
+        return 'shout';
     }
   }
 
-  String _getTailPositionName(TailPosition position) {
-    switch (position) {
-      case TailPosition.bottomLeft:
-        return 'Bottom Left';
-      case TailPosition.bottomRight:
-        return 'Bottom Right';
-      case TailPosition.topLeft:
-        return 'Top Left';
-      case TailPosition.topRight:
-        return 'Top Right';
-      case TailPosition.leftCenter:
-        return 'Left Center';
-      case TailPosition.rightCenter:
-        return 'Right Center';
-      case TailPosition.none:
-        return 'No Tail';
-    }
-  }
 
   @override
   void dispose() {

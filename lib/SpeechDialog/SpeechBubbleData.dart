@@ -8,7 +8,6 @@ class SpeechBubbleData {
   final Color borderColor;
   final double borderWidth;
   final BubbleShape bubbleShape;
-  final TailPosition tailPosition;
   final double padding;
   final double fontSize;
   final Color textColor;
@@ -22,7 +21,6 @@ class SpeechBubbleData {
     required this.borderColor,
     required this.borderWidth,
     required this.bubbleShape,
-    required this.tailPosition,
     required this.padding,
     required this.fontSize,
     required this.textColor,
@@ -38,7 +36,6 @@ class SpeechBubbleData {
       borderColor: Colors.black,
       borderWidth: 2.0,
       bubbleShape: BubbleShape.oval,
-      tailPosition: TailPosition.bottomLeft,
       padding: 12.0,
       fontSize: 16.0,
       textColor: Colors.black,
@@ -55,7 +52,6 @@ class SpeechBubbleData {
       'borderColor': borderColor.value,
       'borderWidth': borderWidth,
       'bubbleShape': bubbleShape.index,
-      'tailPosition': tailPosition.index,
       'padding': padding,
       'fontSize': fontSize,
       'textColor': textColor.value,
@@ -72,7 +68,6 @@ class SpeechBubbleData {
       borderColor: Color(map['borderColor']),
       borderWidth: (map['borderWidth'] ?? 2.0).toDouble(),
       bubbleShape: BubbleShape.values[map['bubbleShape']],
-      tailPosition: TailPosition.values[map['tailPosition']],
       padding: (map['padding'] ?? 12.0).toDouble(),
       fontSize: (map['fontSize'] ?? 16.0).toDouble(),
       textColor: Color(map['textColor']),
