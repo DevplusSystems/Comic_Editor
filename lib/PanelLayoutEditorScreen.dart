@@ -572,6 +572,7 @@ class _PanelLayoutEditorScreenState extends State<PanelLayoutEditorScreen> {
                 ],
               ),
               const SizedBox(height: 16),
+/*
               Expanded(
                 child: GridView.count(
                   crossAxisCount: 2,
@@ -642,6 +643,86 @@ class _PanelLayoutEditorScreenState extends State<PanelLayoutEditorScreen> {
                   ],
                 ),
               ),
+*/
+
+              Expanded(
+                child: GridView.count(
+                  crossAxisCount: 2,
+                  crossAxisSpacing: 16,
+                  mainAxisSpacing: 16,
+                  children: [
+                    _buildLayoutTemplate(
+                      'Single Column',
+                      'Full-width layout',
+                      Icons.view_agenda,
+                      Colors.blue,
+                      _applySingleColumnLayout,
+                    ),
+                    _buildLayoutTemplate(
+                      'Two Columns',
+                      'Side-by-side panels',
+                      Icons.view_column,
+                      Colors.green,
+                      _applyTwoColumnLayout,
+                    ),
+                    _buildLayoutTemplate(
+                      'Three Columns',
+                      'Triple column layout',
+                      Icons.view_week,
+                      Colors.orange,
+                      _applyThreeColumnLayout,
+                    ),
+                    _buildLayoutTemplate(
+                      'Two Rows',
+                      'Top and bottom panels',
+                      Icons.view_day,
+                      Colors.brown,
+                      _applyTwoRowLayout,
+                    ),
+                    _buildLayoutTemplate(
+                      'Grid 2x2',
+                      'Four equal panels',
+                      Icons.grid_4x4,
+                      Colors.purple,
+                      _applyGrid2x2Layout,
+                    ),
+                    _buildLayoutTemplate(
+                      'Header + Content',
+                      'Title with body panels',
+                      Icons.article,
+                      Colors.red,
+                      _applyHeaderContentLayout,
+                    ),
+                    _buildLayoutTemplate(
+                      'Magazine Style',
+                      'Mixed panel sizes',
+                      Icons.auto_stories,
+                      Colors.teal,
+                      _applyMagazineLayout,
+                    ),
+                    _buildLayoutTemplate(
+                      'Comic Strip',
+                      'Horizontal sequence',
+                      Icons.movie_filter,
+                      Colors.indigo,
+                      _applyComicStripLayout,
+                    ),
+                    _buildLayoutTemplate(
+                      'Clear All',
+                      'Remove all panels',
+                      Icons.clear_all,
+                      Colors.grey,
+                          () {
+                        setState(() {
+                          pages[_currentPage].clear();
+                          selectedPanel = null;
+                        });
+                      },
+                    ),
+                  ],
+                ),
+              ),
+
             ],
           ),
         );
@@ -904,11 +985,38 @@ class _PanelLayoutEditorScreenState extends State<PanelLayoutEditorScreen> {
       selectedPanel = null;
     });
   }
+  void _applyTwoRowLayout() {
+    final contentWidth = _canvasWidth - (3 * _pageMargin);
+    final topPanelHeight = _canvasHeight * 0.4;
+    final bottomPanelHeight = _canvasHeight - topPanelHeight - (3 * _pageMargin);
+
+    setState(() {
+      pages[_currentPage] = [
+        LayoutPanel(
+          id: "Top Panel",
+          x: _pageMargin,
+          y: _pageMargin,
+          width: contentWidth,
+          height: topPanelHeight,
+          backgroundColor: Colors.white,
+        ),
+        LayoutPanel(
+          id: "Bottom Panel",
+          x: _pageMargin,
+          y: topPanelHeight + (2 * _pageMargin),
+          width: contentWidth,
+          height: bottomPanelHeight,
+          backgroundColor: Colors.white,
+        ),
+      ];
+      selectedPanel = null;
+    });
+  }
 
   void _applyMagazineLayout() {
     final contentWidth = _canvasWidth - (3 * _pageMargin);
     final leftPanelWidth = contentWidth * 0.6;
-    final rightPanelWidth = contentWidth * 0.35;
+    final rightPanelWidth = contentWidth * 0.4;
     final topRightHeight = _canvasHeight * 0.3;
     final bottomRightHeight =
         _canvasHeight - topRightHeight - (3 * _pageMargin);
@@ -925,7 +1033,7 @@ class _PanelLayoutEditorScreenState extends State<PanelLayoutEditorScreen> {
         ),
         LayoutPanel(
           id: "Sidebar Top",
-          x: leftPanelWidth + (2 * _pageMargin),
+          x: _pageMargin + leftPanelWidth + _pageMargin, // ✅ corrected here
           y: _pageMargin,
           width: rightPanelWidth,
           height: topRightHeight,
@@ -933,8 +1041,8 @@ class _PanelLayoutEditorScreenState extends State<PanelLayoutEditorScreen> {
         ),
         LayoutPanel(
           id: "Sidebar Bottom",
-          x: leftPanelWidth + (2 * _pageMargin),
-          y: topRightHeight + (2 * _pageMargin),
+          x: _pageMargin + leftPanelWidth + _pageMargin, // ✅ same fix
+          y: _pageMargin + topRightHeight + _pageMargin,
           width: rightPanelWidth,
           height: bottomRightHeight,
           backgroundColor: Colors.white,
