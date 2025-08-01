@@ -1800,6 +1800,10 @@ class _PanelLayoutEditorScreenState extends State<PanelLayoutEditorScreen> {
       final byteData = await image.toByteData(format: ImageByteFormat.png);
       final pngBytes = byteData!.buffer.asUint8List();
 
+
+      final decoded = await decodeImageFromList(pngBytes);
+      print("🖼️ Image size: ${decoded.width} x ${decoded.height}");
+
       final pdf = pw.Document();
       final imageProvider = pw.MemoryImage(pngBytes);
 

@@ -48,11 +48,11 @@ class _AllPagesPreviewScreenState extends State<AllPagesPreviewScreen> {
         foregroundColor: Colors.white,
         title: Text('${widget.projectName} - ${widget.pageFormat} Preview'),
         actions: [
-        /*  IconButton(
+          IconButton(
             icon: Icon(Icons.download),
             onPressed: _showExportOptions,
             tooltip: 'Export All Pages',
-          ),*/
+          ),
         ],
       ),
       body: Column(
