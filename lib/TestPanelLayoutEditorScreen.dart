@@ -104,7 +104,7 @@ class _TestPanelLayoutEditorScreenState extends State<TestPanelLayoutEditorScree
                           margin: const EdgeInsets.symmetric(vertical: 14),
                           padding: const EdgeInsets.all(2),
                           decoration: BoxDecoration(
-                            color: Colors.grey[200],
+                            color: Colors.grey[100],
                           ),
                           child: DragTarget<LayoutPanel>(
                             onAcceptWithDetails: (details) {
@@ -150,7 +150,10 @@ class _TestPanelLayoutEditorScreenState extends State<TestPanelLayoutEditorScree
                                           ),
                                           const SizedBox(height: 16),
                                           Text(
+/*
                                             'Empty $_selectedPageFormat Page',
+*/
+                                            'Empty  Page',
                                             style: TextStyle(
                                               fontSize: 20,
                                               color: Colors.grey[600],
@@ -165,13 +168,13 @@ class _TestPanelLayoutEditorScreenState extends State<TestPanelLayoutEditorScree
                                             ),
                                           ),
                                           const SizedBox(height: 8),
-                                          Text(
+                                          /*Text(
                                             '${_canvasWidth.toInt()} × ${_canvasHeight.toInt()} pts',
                                             style: TextStyle(
                                               color: Colors.grey[400],
                                               fontSize: 12,
                                             ),
-                                          ),
+                                          ),*/
                                         ],
                                       ),
                                     ),
@@ -249,22 +252,6 @@ class _TestPanelLayoutEditorScreenState extends State<TestPanelLayoutEditorScree
     return Container(
       width: panel.width,
       height: panel.height,
-      decoration: BoxDecoration(
-        border: Border.all(
-          color: selectedPanel == panel
-              ? Colors.blue
-              : Colors.grey.withOpacity(0.3),
-          width: selectedPanel == panel ? 3 : 1,
-        ),
-        borderRadius: BorderRadius.circular(8),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black26,
-            blurRadius: selectedPanel == panel ? 6 : 2,
-            offset: Offset(0, selectedPanel == panel ? 3 : 1),
-          ),
-        ],
-      ),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(8),
         child: panel.previewImage != null
@@ -374,13 +361,6 @@ class _TestPanelLayoutEditorScreenState extends State<TestPanelLayoutEditorScree
       margin: EdgeInsets.only(top: MediaQuery.of(context).padding.top),
       decoration: BoxDecoration(
         color: Colors.white,
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.1),
-            blurRadius: 4,
-            offset: Offset(0, 2),
-          ),
-        ],
       ),
       padding: EdgeInsets.symmetric(horizontal: 16),
       child: Row(
@@ -410,48 +390,23 @@ class _TestPanelLayoutEditorScreenState extends State<TestPanelLayoutEditorScree
                   ),
                   overflow: TextOverflow.ellipsis,
                 ),
-                Text(
+                /*Text(
                   '$_selectedPageFormat Format',
                   style: TextStyle(
                     fontSize: 12,
                     color: Colors.grey[600],
                   ),
-                ),
+                ),*/
               ],
             ),
           ),
-          SizedBox(width: 8),
+         /* SizedBox(width: 8),
           _buildAppBarButton(
             icon: Icons.download,
             label: 'Export',
             onPressed: _showExportOptions,
-          ),
+          ),*/
         ],
-      ),
-    );
-  }
-
-  Widget _buildAppBarButton({
-    required IconData icon,
-    required String label,
-    required VoidCallback onPressed,
-  }) {
-    return Tooltip(
-      message: label,
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: onPressed,
-          borderRadius: BorderRadius.circular(8),
-          child: Container(
-            padding: EdgeInsets.all(8),
-            child: Icon(
-              icon,
-              color: Colors.black87,
-              size: 20,
-            ),
-          ),
-        ),
       ),
     );
   }
@@ -461,6 +416,7 @@ class _TestPanelLayoutEditorScreenState extends State<TestPanelLayoutEditorScree
       color: Colors.grey.shade200,
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       child: Row(
+        mainAxisAlignment: MainAxisAlignment.center, // 👈 Centers the Row content
         children: [
           const Text("Pages:", style: TextStyle(fontWeight: FontWeight.bold)),
           const SizedBox(width: 12),
@@ -481,7 +437,7 @@ class _TestPanelLayoutEditorScreenState extends State<TestPanelLayoutEditorScree
                 ? () => _switchPage(_currentPage + 1)
                 : null,
           ),
-          const Spacer(),
+         /* const Spacer(),
           Text(
             '$_selectedPageFormat',
             style: TextStyle(
@@ -489,7 +445,7 @@ class _TestPanelLayoutEditorScreenState extends State<TestPanelLayoutEditorScree
               color: Colors.grey[600],
               fontWeight: FontWeight.bold,
             ),
-          ),
+          ),*/
         ],
       ),
     );
@@ -540,7 +496,10 @@ class _TestPanelLayoutEditorScreenState extends State<TestPanelLayoutEditorScree
               if (pagePanels.isEmpty)
                 Center(
                   child: Text(
+/*
                     'Empty $_selectedPageFormat Page',
+*/
+                    'Empty Page',
                     style: TextStyle(fontSize: 20),
                   ),
                 ),

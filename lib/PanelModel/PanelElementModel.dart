@@ -2,8 +2,8 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'dart:typed_data';
-import '../SpeechDialog/SpeechBubbleComponents.dart';
-import '../SpeechDialog/SpeechBubbleData.dart';
+
+import '../SpeechDrag/DragSpeechBubbleData.dart';
 class PanelElementModel {
   final String id;
   final String type; // e.g., "text", "draw", "speech_bubble"
@@ -118,10 +118,10 @@ class PanelElementModel {
   }
 
   // If this is a speech bubble, decode its value
-  SpeechBubbleData? get speechBubbleData {
+  DragSpeechBubbleData? get speechBubbleData {
     if (type != 'speech_bubble') return null;
     try {
-      return SpeechBubbleData.fromMap(jsonDecode(value));
+      return DragSpeechBubbleData.fromMap(jsonDecode(value));
     } catch (_) {
       return null;
     }

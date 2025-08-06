@@ -79,14 +79,18 @@ class _CharacterClipartPickerDialogState
             children: [
               const TabBar(tabs: [
                 Tab(text: 'Characters'),
+/*
                 Tab(text: 'Clip-Art'),
+*/
               ]),
               const SizedBox(height: 10),
               Expanded(
                 child: TabBarView(
                   children: [
                     _buildEmojiTab(context),
+/*
                     _buildClipartTab(context),
+*/
                   ],
                 ),
               ),

@@ -1,33 +1,44 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_colorpicker/flutter_colorpicker.dart';
 
-import 'SpeechBubbleComponents.dart';
+import 'DragSpeechBubbleComponents.dart';
 
-class SpeechBubbleEditDialog extends StatefulWidget {
+class DragSpeechBubbleEditDialog extends StatefulWidget {
   final Map<String, dynamic> initialData;
 
-  const SpeechBubbleEditDialog({
+  const DragSpeechBubbleEditDialog({
     super.key,
     required this.initialData,
   });
 
   @override
-  _SpeechBubbleEditDialogState createState() => _SpeechBubbleEditDialogState();
+  State<DragSpeechBubbleEditDialog> createState() =>
+      _DragSpeechBubbleEditDialogState();
 }
 
-class _SpeechBubbleEditDialogState extends State<SpeechBubbleEditDialog> {
+class _DragSpeechBubbleEditDialogState
+    extends State<DragSpeechBubbleEditDialog> {
+  final GlobalKey _bubbleKey = GlobalKey();
+
+  String text = "Hello!";
+  Offset _tailOffset = const Offset(150, 180);
+  Color bubbleColor = Colors.white;
+  Color borderColor = Colors.black;
+  Color textColor = Colors.black;
+  double fontSize = 16;
+  double borderWidth = 2.0;
+  DragBubbleShape shape = DragBubbleShape.rectangle;
   late TextEditingController _textController;
   late Color _bubbleColor;
   late Color _borderColor;
   late Color _textColor;
   late double _fontSize;
   late double _borderWidth;
-  late BubbleShape _bubbleShape;
-  late TailPosition _tailPosition;
   late String _fontFamily;
-  late FontWeight _fontWeight;
   late FontStyle _fontStyle;
   late double _padding;
+  late FontWeight _fontWeight;
+  late DragBubbleShape _bubbleShape;
 
   final List<String> _fontFamilies = [
     'Roboto',
@@ -38,6 +49,14 @@ class _SpeechBubbleEditDialogState extends State<SpeechBubbleEditDialog> {
     'Impact',
     'Verdana',
   ];
+  String _getBubbleShapeName(DragBubbleShape shape) {
+    switch (shape) {
+      case DragBubbleShape.rectangle:
+        return 'Rectangle';
+      default:
+        return 'Unknown';
+    }
+  }
 
   @override
   void initState() {
@@ -49,7 +68,7 @@ class _SpeechBubbleEditDialogState extends State<SpeechBubbleEditDialog> {
     _fontSize = widget.initialData['fontSize'];
     _borderWidth = widget.initialData['borderWidth'];
     _bubbleShape = widget.initialData['bubbleShape'];
-    _tailPosition = widget.initialData['tailPosition'];
+    _tailOffset = widget.initialData['_tailOffset'] ?? const Offset(150, 180);
     _fontFamily = widget.initialData['fontFamily'];
     _fontWeight = widget.initialData['fontWeight'];
     _fontStyle = widget.initialData['fontStyle'];
@@ -66,41 +85,88 @@ class _SpeechBubbleEditDialogState extends State<SpeechBubbleEditDialog> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              // Preview - FIXED to update in real-time
-              Container(
-                height: 150,
-                width: 200,
-                margin: const EdgeInsets.only(bottom: 16),
-                child: CustomPaint(
-                  size: const Size(200, 120),
-                  painter: SpeechBubblePainter(
-                    bubbleColor: _bubbleColor,
-                    borderColor: _borderColor,
-                    borderWidth: _borderWidth,
-                    bubbleShape: _bubbleShape,
-                    tailPosition: _tailPosition,
-                  ),
-                  child: Container(
-                    padding: EdgeInsets.all(_padding),
-                    child: Center(
-                      child: Text(
-                        _textController.text.isEmpty ? 'Preview' : _textController.text,
-                        style: TextStyle(
-                          fontSize: _fontSize * 0.8, // Scale for preview
-                          color: _textColor,
-                          fontFamily: _fontFamily,
-                          fontWeight: _fontWeight,
-                          fontStyle: _fontStyle,
+
+              SizedBox(
+                width: 500,
+                height: 220, // Full height including tail space
+                child: Stack(
+                  children: [
+                  /*  CustomPaint(
+                      size: const Size(300, 240), // Taller canvas
+                      painter: DragSpeechBubblePainter(
+                        bubbleColor: _bubbleColor,
+                        borderColor: _borderColor,
+                        borderWidth: _borderWidth,
+                        bubbleShape: _bubbleShape,
+                        tailOffset: _tailOffset,
+                      ),
+                      child: Container(
+                        alignment: Alignment.center,
+                        padding: const EdgeInsets.all(8),
+                        child: Text(
+                          text,
+                          textAlign: TextAlign.center,
+                          style:
+                              TextStyle(fontSize: fontSize, color: textColor),
                         ),
-                        textAlign: TextAlign.center,
-                        maxLines: 3,
-                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),*/
+
+                    Container(
+                      key: _bubbleKey,
+                      child: CustomPaint(
+                        size: const Size(300, 240),
+                        painter: DragSpeechBubblePainter(
+                          bubbleColor: _bubbleColor,          // ✅ use updated values
+                          borderColor: _borderColor,
+                          borderWidth: _borderWidth,
+                          bubbleShape: _bubbleShape,
+                          tailOffset: _tailOffset,
+                        ),
+                        child: Container(
+                          alignment: Alignment.center,
+                          padding: EdgeInsets.all(_padding),
+                          child: Text(
+                            _textController.text,
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              fontSize: _fontSize,
+                              color: _textColor,
+                              fontFamily: _fontFamily,
+                              fontWeight: _fontWeight,
+                              fontStyle: _fontStyle,
+                            ),
+                          ),
+                        ),
                       ),
                     ),
-                  ),
+                    Positioned(
+                      left: _tailOffset.dx - 10,
+                      top: _tailOffset.dy - 10,
+                      child: GestureDetector(
+                        onPanUpdate: (details) {
+                          setState(() {
+                            _tailOffset += details.delta;
+                            _tailOffset = Offset(
+                              _tailOffset.dx.clamp(0, 320),
+                              _tailOffset.dy.clamp(0, 200),
+                            );
+                          });
+                        },
+                        child: Container(
+                          width: 20,
+                          height: 20,
+                          decoration: BoxDecoration(
+                            color: Colors.red,
+                            shape: BoxShape.circle,
+                            border: Border.all(color: Colors.black),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ),
-
               // Text input
               TextField(
                 controller: _textController,
@@ -115,13 +181,13 @@ class _SpeechBubbleEditDialogState extends State<SpeechBubbleEditDialog> {
               const SizedBox(height: 16),
 
               // Bubble Shape - FIXED
-              DropdownButtonFormField<BubbleShape>(
+              DropdownButtonFormField<DragBubbleShape>(
                 value: _bubbleShape,
                 decoration: const InputDecoration(
                   labelText: 'Bubble Shape',
                   border: OutlineInputBorder(),
                 ),
-                items: BubbleShape.values.map((shape) {
+                items: DragBubbleShape.values.map((shape) {
                   return DropdownMenuItem(
                     value: shape,
                     child: Text(_getBubbleShapeName(shape)),
@@ -132,23 +198,6 @@ class _SpeechBubbleEditDialogState extends State<SpeechBubbleEditDialog> {
 
               const SizedBox(height: 16),
 
-              // Tail Position - FIXED
-              DropdownButtonFormField<TailPosition>(
-                value: _tailPosition,
-                decoration: const InputDecoration(
-                  labelText: 'Tail Position',
-                  border: OutlineInputBorder(),
-                ),
-                items: TailPosition.values.map((position) {
-                  return DropdownMenuItem(
-                    value: position,
-                    child: Text(_getTailPositionName(position)),
-                  );
-                }).toList(),
-                onChanged: (value) => setState(() => _tailPosition = value!),
-              ),
-              const SizedBox(height: 16),
-
               // Colors
               Row(
                 children: [
@@ -156,7 +205,7 @@ class _SpeechBubbleEditDialogState extends State<SpeechBubbleEditDialog> {
                     child: _buildColorPicker(
                       'Bubble Color',
                       _bubbleColor,
-                          (color) => setState(() => _bubbleColor = color),
+                      (color) => setState(() => _bubbleColor = color),
                     ),
                   ),
                   const SizedBox(width: 8),
@@ -164,7 +213,7 @@ class _SpeechBubbleEditDialogState extends State<SpeechBubbleEditDialog> {
                     child: _buildColorPicker(
                       'Border Color',
                       _borderColor,
-                          (color) => setState(() => _borderColor = color),
+                      (color) => setState(() => _borderColor = color),
                     ),
                   ),
                 ],
@@ -175,7 +224,7 @@ class _SpeechBubbleEditDialogState extends State<SpeechBubbleEditDialog> {
               _buildColorPicker(
                 'Text Color',
                 _textColor,
-                    (color) => setState(() => _textColor = color),
+                (color) => setState(() => _textColor = color),
               ),
 
               const SizedBox(height: 16),
@@ -209,7 +258,8 @@ class _SpeechBubbleEditDialogState extends State<SpeechBubbleEditDialog> {
                       max: 8,
                       divisions: 16,
                       label: _borderWidth.toStringAsFixed(1),
-                      onChanged: (value) => setState(() => _borderWidth = value),
+                      onChanged: (value) =>
+                          setState(() => _borderWidth = value),
                     ),
                   ),
                   Text(_borderWidth.toStringAsFixed(1)),
@@ -265,12 +315,17 @@ class _SpeechBubbleEditDialogState extends State<SpeechBubbleEditDialog> {
                         border: OutlineInputBorder(),
                       ),
                       items: const [
-                        DropdownMenuItem(value: FontWeight.normal, child: Text('Normal')),
-                        DropdownMenuItem(value: FontWeight.bold, child: Text('Bold')),
-                        DropdownMenuItem(value: FontWeight.w300, child: Text('Light')),
-                        DropdownMenuItem(value: FontWeight.w600, child: Text('Semi-Bold')),
+                        DropdownMenuItem(
+                            value: FontWeight.normal, child: Text('Normal')),
+                        DropdownMenuItem(
+                            value: FontWeight.bold, child: Text('Bold')),
+                        DropdownMenuItem(
+                            value: FontWeight.w300, child: Text('Light')),
+                        DropdownMenuItem(
+                            value: FontWeight.w600, child: Text('Semi-Bold')),
                       ],
-                      onChanged: (value) => setState(() => _fontWeight = value!),
+                      onChanged: (value) =>
+                          setState(() => _fontWeight = value!),
                     ),
                   ),
                   const SizedBox(width: 8),
@@ -282,8 +337,10 @@ class _SpeechBubbleEditDialogState extends State<SpeechBubbleEditDialog> {
                         border: OutlineInputBorder(),
                       ),
                       items: const [
-                        DropdownMenuItem(value: FontStyle.normal, child: Text('Normal')),
-                        DropdownMenuItem(value: FontStyle.italic, child: Text('Italic')),
+                        DropdownMenuItem(
+                            value: FontStyle.normal, child: Text('Normal')),
+                        DropdownMenuItem(
+                            value: FontStyle.italic, child: Text('Italic')),
                       ],
                       onChanged: (value) => setState(() => _fontStyle = value!),
                     ),
@@ -296,33 +353,53 @@ class _SpeechBubbleEditDialogState extends State<SpeechBubbleEditDialog> {
       ),
       actions: [
         TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('Cancel'),
-        ),
+            onPressed: () => Navigator.pop(context),
+            child: const Text("Cancel")),
         ElevatedButton(
           onPressed: () {
+
+            final renderBox = _bubbleKey.currentContext?.findRenderObject() as RenderBox?;
+            final actualSize = renderBox?.size ?? const Size(150, 100); // fallback
+
             Navigator.pop(context, {
               'text': _textController.text,
+              'tailOffset': _tailOffset,
               'bubbleColor': _bubbleColor,
               'borderColor': _borderColor,
+              'borderWidth': _borderWidth,
               'textColor': _textColor,
               'fontSize': _fontSize,
-              'borderWidth': _borderWidth,
               'bubbleShape': _bubbleShape,
-              'tailPosition': _tailPosition,
               'fontFamily': _fontFamily,
               'fontWeight': _fontWeight,
               'fontStyle': _fontStyle,
               'padding': _padding,
+              'width': actualSize.width,   // 👈 include size
+              'height': actualSize.height, // 👈 include size
             });
           },
-          child: const Text('Apply'),
+
+          /* onPressed: () {
+            Navigator.pop(context, {
+              'text': text,
+              'tailOffset': _tailOffset,
+              'bubbleColor': bubbleColor,
+              'borderColor': borderColor,
+              'borderWidth': borderWidth,
+              'textColor': textColor,
+              'fontSize': fontSize,
+              'bubbleShape': shape,
+            });
+          },*/
+
+          child: const Text("Apply"),
         ),
       ],
     );
   }
 
-  Widget _buildColorPicker(String label, Color currentColor, Function(Color) onColorChanged) {
+  Widget _buildColorPicker(
+      String label, Color currentColor, Function(Color) onColorChanged) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -359,35 +436,6 @@ class _SpeechBubbleEditDialogState extends State<SpeechBubbleEditDialog> {
       ],
     );
   }
-
-  String _getBubbleShapeName(BubbleShape shape) {
-    switch (shape) {
-      /*case BubbleShape.oval:
-        return 'Oval';*/
-      case BubbleShape.rectangle:
-        return 'Rectangle';
-      case BubbleShape.shout:
-        return 'shout';
-    }
-  }
-  String _getTailPositionName(TailPosition position) {
-    switch (position) {
-      case TailPosition.bottomLeft:
-        return 'Bottom Left';
-      case TailPosition.bottomRight:
-        return 'Bottom Right';
-      case TailPosition.bottomCenter:
-        return 'Bottom Center';
-      case TailPosition.topLeft:
-        return 'Top Left';
-      case TailPosition.topRight:
-        return 'Top Right';
-      case TailPosition.none:
-        return 'No Tail';
-    }
-  }
-
-
 
 
   @override

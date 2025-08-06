@@ -7,6 +7,10 @@ class ResizableDraggable extends StatefulWidget {
   final double initialTop;
   final double initialLeft;
   final Function(Offset, Size)? onPositionChanged;
+  final double minWidth;
+  final double minHeight;
+  final double maxWidth;
+  final double maxHeight;
 
   const ResizableDraggable({
     super.key,
@@ -15,6 +19,10 @@ class ResizableDraggable extends StatefulWidget {
     this.initialTop = 0,
     this.initialLeft = 0,
     this.onPositionChanged,
+    this.minWidth = 10.0,
+    this.minHeight = 10.0,
+    this.maxWidth = double.infinity,
+    this.maxHeight = double.infinity,
   });
 
   @override
@@ -65,8 +73,10 @@ class ResizableDraggableState extends State<ResizableDraggable> {
                 child: GestureDetector(
                   onPanUpdate: (details) {
                     setState(() {
-                      width = (width + details.delta.dx).clamp(30.0, 400.0);
-                      height = (height + details.delta.dy).clamp(30.0, 400.0);
+            /*          width = (width + details.delta.dx).clamp(30.0, 400.0);
+                      height = (height + details.delta.dy).clamp(30.0, 400.0);*/
+                      width = (width + details.delta.dx).clamp(10.0, double.infinity);
+                      height = (height + details.delta.dy).clamp(10.0, double.infinity);
                     });
                   },
                   onPanEnd: (details) {

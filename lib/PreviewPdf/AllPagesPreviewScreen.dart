@@ -3,6 +3,7 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
+import 'package:fluttertoast/fluttertoast.dart';
 import 'package:printing/printing.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
@@ -46,11 +47,28 @@ class _AllPagesPreviewScreenState extends State<AllPagesPreviewScreen> {
       appBar: AppBar(
         backgroundColor: Colors.black,
         foregroundColor: Colors.white,
+/*
         title: Text('${widget.projectName} - ${widget.pageFormat} Preview'),
+*/
+        title: Text('${widget.projectName} - Preview'),
         actions: [
           IconButton(
             icon: Icon(Icons.download),
+/*
             onPressed: _showExportOptions,
+*/
+            onPressed: () {
+              Fluttertoast.showToast(
+                msg: "Exporting all pages is not supported yet.",
+                toastLength: Toast.LENGTH_SHORT,
+                gravity: ToastGravity.BOTTOM,
+                timeInSecForIosWeb: 1,
+                backgroundColor: Colors.grey[800],
+                textColor: Colors.white,
+                fontSize: 14.0,
+              );
+            },
+
             tooltip: 'Export All Pages',
           ),
         ],
@@ -64,7 +82,10 @@ class _AllPagesPreviewScreenState extends State<AllPagesPreviewScreen> {
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 Text(
+/*
                   'Page ${_currentPageIndex + 1} of ${widget.pages.length} • ${widget.pageFormat}',
+*/
+                  'Page ${_currentPageIndex + 1} of ${widget.pages.length} ',
                   style: TextStyle(
                     color: Colors.white,
                     fontSize: 18,
@@ -119,7 +140,10 @@ class _AllPagesPreviewScreenState extends State<AllPagesPreviewScreen> {
                                     ),
                                     SizedBox(height: 16),
                                     Text(
+/*
                                       'Empty ${widget.pageFormat} Page',
+*/
+                                      'Empty Page',
                                       style: TextStyle(
                                         fontSize: 24,
                                         color: Colors.grey[600],
