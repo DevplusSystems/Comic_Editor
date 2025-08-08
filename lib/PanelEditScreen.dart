@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:comic_editor/SpeechDrag/DragSpeechBubbleEditDialog.dart';
 import 'package:flutter/cupertino.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_colorpicker/flutter_colorpicker.dart';
 import 'package:image_picker/image_picker.dart';
@@ -18,11 +19,6 @@ import 'Resizeable/GridPainter.dart';
 import 'PanelModel/PanelElementModel.dart';
 import 'Resizeable/ResizableDraggable.dart';
 import 'package:flutter/services.dart';
-
-import 'SpeechDialog/BubbleEditDialog.dart';
-import 'SpeechDialog/SpeechBubbleComponents.dart';
-import 'SpeechDialog/SpeechBubbleData.dart' hide DragSpeechBubbleData;
-import 'SpeechDialog/SpeechBubbleEditDialog.dart';
 import 'SpeechDrag/DragSpeechBubbleComponents.dart';
 import 'SpeechDrag/DragSpeechBubbleData.dart';
 import 'TextEditorDialog/TextEditDialog.dart';
@@ -62,10 +58,7 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
 
   final GlobalKey _panelContentKey = GlobalKey();
   int? selectedElementIndex;
-
-  late final double _screenWidth;
-  late final double _screenHeight;
-
+   double aspectRatio = 3 / 4; // or 4 / 3 if landscape
   List<IconData> clipArtIcons = [
     Icons.star,
     Icons.favorite,
@@ -85,8 +78,6 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
     Icons.beach_access,
     Icons.sports_esports,
   ];
-
-
   Map<String, IconData> iconMap = {
     'star': Icons.star,
     'favorite': Icons.favorite,
@@ -103,25 +94,12 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
     'pets': Icons.pets,
     'sports_esports': Icons.sports_esports,
   };
-
   @override
   void initState() {
     super.initState();
-
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _screenWidth = MediaQuery.of(context).size.width;
-      _screenHeight = MediaQuery.of(context).size.height;
-    });
-
     panel = widget.panel;
     currentElements = List.from(panel.elements);
     _selectedBackgroundColor = panel.backgroundColor;
-
-    print('Panel elements count: ${currentElements.length}');
-    for (int i = 0; i < currentElements.length; i++) {
-      print(
-          'Element $i: ${currentElements[i].type} - ${currentElements[i].value}');
-    }
 
     _initializeElements();
   }
@@ -133,15 +111,129 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
     }
   }
 
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.white,
+      appBar: AppBar(
+        title: const Text('Edit Panel'),
+        backgroundColor: Colors.blue.shade400,
+        foregroundColor: Colors.white,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.undo),
+            onPressed: _isSaving
+                ? null
+                : () {
+                    if (currentElements.isNotEmpty && elementKeys.isNotEmpty) {
+                      setState(() {
+                        // Clear selection if last element is selected
+                        if (selectedElementIndex ==
+                            currentElements.length - 1) {
+                          selectedElementIndex = null;
+                        }
+                        currentElements.removeLast();
+                        elementKeys.removeLast();
+                      });
+                    }
+                  },
+          ),
+          if (selectedElementIndex != null)
+            IconButton(
+              icon: const Icon(Icons.delete),
+              onPressed: () {
+                setState(() {
+                  currentElements.removeAt(selectedElementIndex!);
+                  elementKeys.removeAt(selectedElementIndex!);
+                  selectedElementIndex = null;
+                });
+              },
+            ),
+          ElevatedButton(
+            onPressed: _isSaving ? null : _savePanel,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.green,
+              foregroundColor: Colors.white,
+            ),
+            child: _isSaving
+                ? const SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                    ),
+                  )
+                : const Text('Save Panel'),
+          ),
+          const SizedBox(width: 8),
+        ],
+      ),
+      body: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          Column(
+            children: [
+              // Panel Canvas Area
+              Expanded(
+                child: Center( // ensures it's centered if there's padding/margin
+                  child: AspectRatio(
+                    aspectRatio: aspectRatio, // or 4 / 3 or any other fixed ratio
+                    child: RepaintBoundary(
+                      key: _panelContentKey,
+                      child: Container(
+                        color: _selectedBackgroundColor,
+                        child: Stack(
+                          clipBehavior: Clip.none,
+                          children: [
+                            if (_isEditing)
+                              CustomPaint(
+                                size: Size.infinite,
+                                painter: GridPainter(),
+                              ),
+                            if (isDrawing)
+                              Positioned.fill(
+                                child: DrawingCanvas(
+                                  tool: currentTool,
+                                  brushSize: selectedBrushSize,
+                                  color: drawSelectedColor,
+                                  onDrawingComplete: _onDrawingComplete,
+                                ),
+                              ),
+                            for (int i = 0; i < currentElements.length; i++)
+                              _buildElementWidget(currentElements[i], i),
+                            if (currentElements.isEmpty)
+                              const Center(
+                                child: Text(
+                                  'No elements added yet.\nUse the tools below to add content.',
+                                  textAlign: TextAlign.center,
+                                  style: TextStyle(fontSize: 16, color: Colors.grey),
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              // Footer toolbar
+              _buildToolOptions(),
+            ],
+          ),
+          if (selectedElementIndex != null)
+            _buildFloatingToolbox(currentElements[selectedElementIndex!]),
+        ],
+      ),
+    );
+  }
+
   Widget _buildElementWidget(PanelElementModel element, int index) {
     Widget child;
-
-    print('Building element: ${element.type} with value: ${element.value}');
-
     switch (element.type) {
 
 
-      /*case 'clipart':
+    /*case 'clipart':
         try {
           child = SizedBox(
             width: element.width,
@@ -188,27 +280,6 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
           ),
         );
         break;
-
-     /* case 'text':
-        child = SizedBox(
-          width: element.width,
-          height: element.height,
-          child: FittedBox(
-            alignment: Alignment.center,
-            child: Text(
-              element.value,
-              style: TextStyle(
-                fontSize: element.fontSize ?? 10,
-                color: element.color ?? Colors.black,
-                fontFamily: element.fontFamily,
-                fontWeight: element.fontWeight ?? FontWeight.normal,
-                fontStyle: element.fontStyle ?? FontStyle.normal,
-              ),
-            ),
-          ),
-        );
-        break;*/
-
       case 'text':
         child = Container(
           width: element.width,
@@ -228,33 +299,12 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
         );
         break;
 
-
-     /* case 'text':
-        child = SizedBox(
-          width: element.width,
-          height: element.height,
-          child: Text(
-            element.value,
-            style: TextStyle(
-              fontSize: element.fontSize ?? 10,
-              color: element.color ?? Colors.black,
-              fontFamily: element.fontFamily,
-              fontWeight: element.fontWeight ?? FontWeight.normal,
-              fontStyle: element.fontStyle ?? FontStyle.normal,
-            ),
-          ),
-        );
-        break;*/
-
-      /*  case 'speech_bubble':
-        child = _buildSpeechBubble(element);
-        break;*/
       case 'speech_bubble':
         final isSelected = selectedElementIndex == index;
         final decoratedChild = Container(
           decoration: BoxDecoration(
             border:
-                isSelected ? Border.all(color: Colors.blue, width: 2) : null,
+            isSelected ? Border.all(color: Colors.blue, width: 2) : null,
           ),
           child: _buildSpeechBubble(element),
         );
@@ -262,7 +312,7 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
         if (_isEditing) {
           return ResizableDraggable(
             key: elementKeys[index],
-            isSelected: selectedElementIndex == index, // ✅
+            isSelected: selectedElementIndex == index,
             size: Size(element.width, element.height),
             initialTop: element.offset.dy,
             initialLeft: element.offset.dx,
@@ -303,53 +353,6 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
             ),
           );
         }
-        break;
-      case 'bubble':
-        child = Container(
-          width: element.width,
-          height: element.height,
-          padding: const EdgeInsets.all(8),
-          decoration: BoxDecoration(
-            color: (element.color ?? Colors.blue).withOpacity(0.5),
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: element.color ?? Colors.blue, width: 2),
-          ),
-          child: FittedBox(
-            fit: BoxFit.contain,
-            child: Text(
-              element.value,
-              style: const TextStyle(
-                color: Colors.black,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-          ),
-        );
-        break;
-
-     /* case 'image':
-        child = Container(
-          width: element.width,
-          height: element.height,
-          decoration: BoxDecoration(
-            border: Border.all(color: Colors.grey),
-            borderRadius: BorderRadius.circular(4),
-          ),
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(4),
-            child: Image.file(
-              File(element.value),
-              fit: BoxFit.cover,
-              errorBuilder: (context, error, stackTrace) {
-                return Container(
-                  color: Colors.grey[300],
-                  child: const Icon(Icons.broken_image, color: Colors.grey),
-                );
-              },
-            ),
-          ),
-        );
-        break;*/
       case 'image':
         child = Container(
           width: element.width,
@@ -357,7 +360,7 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
           child: ClipRRect(
             borderRadius: BorderRadius.circular(5),
             child: FittedBox(
-              fit: BoxFit.contain, // ✅ FIXED: Prevents cropping or overflow
+              fit: BoxFit.contain,
               child: Image.file(
                 File(element.value),
                 errorBuilder: (context, error, stackTrace) {
@@ -373,12 +376,6 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
           ),
         );
         break;
-
-
-
-
-
-
       case 'Draw':
         final points = element.value.split(';').map((pair) {
           final coords = pair.split(',');
@@ -392,7 +389,7 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
           painter: DrawingElementPainter(
             points: points,
             color: element.color ?? Colors.black,
-            strokeWidth: element.fontSize ?? 1.0, // 👈 use saved size
+            strokeWidth: element.fontSize ?? 1.0,
           ),
         );
 
@@ -400,7 +397,7 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
         final decoratedChild = Container(
           decoration: BoxDecoration(
             border:
-                isSelected ? Border.all(color: Colors.blue, width: 2) : null,
+            isSelected ? Border.all(color: Colors.blue, width: 2) : null,
           ),
           child: drawingWidget,
         );
@@ -408,7 +405,7 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
         if (_isEditing) {
           return ResizableDraggable(
             key: elementKeys[index],
-            isSelected: selectedElementIndex == index, // ✅
+            isSelected: selectedElementIndex == index,
             size: Size(element.width, element.height),
             initialTop: element.offset.dy,
             initialLeft: element.offset.dx,
@@ -445,7 +442,6 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
             ),
           );
         }
-        break;
       default:
         child = Container(
           width: element.width,
@@ -468,7 +464,7 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
     if (_isEditing) {
       return ResizableDraggable(
         key: elementKeys[index],
-        isSelected: selectedElementIndex == index, // ✅
+        isSelected: selectedElementIndex == index,
         size: elementSize,
         initialTop: element.offset.dy,
         initialLeft: element.offset.dx,
@@ -488,7 +484,7 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
           onTap: () {
             setState(() {
               selectedElementIndex =
-                  selectedElementIndex == index ? null : index;
+              selectedElementIndex == index ? null : index;
             });
           },
           onDoubleTap: () {
@@ -519,9 +515,6 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
       );
     }
   }
-
-  /*text tool bar at the top left*/
-
 
   Widget _buildFloatingToolbox(PanelElementModel element) {
     List<Widget> toolIcons = [];
@@ -578,7 +571,7 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
               });
             },
           ),*/
-       /*   _toolIcon(
+          /*   _toolIcon(
             id: 'flipX',
             icon: Icons.flip,
             tooltip: 'Flip Horizontal',
@@ -592,7 +585,7 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
               });
             },
           ),*/
-         /* _toolIcon(
+          /* _toolIcon(
             id: 'flipY',
             icon: Icons.flip_camera_android,
             tooltip: 'Flip Vertical',
@@ -606,7 +599,7 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
               });
             },
           ),*/
-         /* _toolIcon(
+          /* _toolIcon(
             id: 'crop',
             icon: Icons.crop,
             tooltip: 'Crop Image',
@@ -657,81 +650,13 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
       ),
     );
   }
-
-
-/*
-  Widget _buildFloatingToolbox(PanelElementModel element) {
-    return Align(
-      alignment: Alignment.centerRight,
-      child: Padding(
-        padding: const EdgeInsets.only(right: 10),
-        child: Material(
-          elevation: 6,
-          borderRadius: BorderRadius.circular(8),
-          color: Colors.white,
-          child: Container(
-            padding: const EdgeInsets.symmetric(vertical: 8),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(8),
-              boxShadow: const [
-                BoxShadow(color: Colors.black26, blurRadius: 4)
-              ],
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                _toolIcon(
-                  id: 'color',
-                  icon: Icons.format_color_text,
-                  tooltip: 'Text Color',
-                  onTap: () => _changeTextColorById(element.id),
-                ),
-                _toolIcon(
-                  id: 'size',
-                  icon: Icons.format_size,
-                  tooltip: 'Font Size',
-                  onTap: () => _changeFontSizeById(element.id),
-                ),
-                _toolIcon(
-                  id: 'bold',
-                  icon: Icons.format_bold,
-                  tooltip: 'Bold',
-                  onTap: () => _toggleBoldById(element.id),
-                ),
-                _toolIcon(
-                  id: 'italic',
-                  icon: Icons.format_italic,
-                  tooltip: 'Italic',
-                  onTap: () => _toggleItalicById(element.id),
-                ),
-                _toolIcon(
-                  id: 'delete',
-                  icon: Icons.delete,
-                  tooltip: 'Delete',
-                  onTap: () => _deleteElementById(element.id),
-                ),
-                _toolIcon(
-                  id: 'replace',
-                  icon: Icons.image_search,
-                  tooltip: 'Replace Image',
-                  onTap: () => _replaceImageById(element.id),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-*/
-
   Widget _toolIcon({
     required String id,
     required IconData icon,
     required String tooltip,
     required VoidCallback onTap,
-  }) {
+  })
+  {
     final isActive = _activeToolId == id;
 
     return Container(
@@ -812,7 +737,7 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
         return AlertDialog(
           title: const Text("Set Font Size"),
           content: SizedBox(
-            height: 80, // ✅ Limit height to just what you need
+            height: 80,
             child: StatefulBuilder(
               builder: (context, setState) {
                 return Slider(
@@ -910,21 +835,11 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
   }
 
   Widget _buildSpeechBubble(PanelElementModel element) {
-/*
-    final bubble = element.speechBubbleData;
-*/
-
     final bubble = element.speechBubbleData ??
         DragSpeechBubbleData.fromMap(jsonDecode(element.value));
-
     if (bubble == null) {
       return const SizedBox(); // fallback
     }
-    print("Rendering bubble:=${bubble}");
-
-    print(
-        "Rendering bubble: shape=${bubble.bubbleShape}, tail=${bubble.tailOffset}");
-
     return SizedBox.expand(
       child: CustomPaint(
         painter: DragSpeechBubblePainter(
@@ -954,35 +869,6 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
         ),
       ),
     );
-
-/*
-    return CustomPaint(
-      size: Size(element.width, element.height),
-      painter: DragSpeechBubblePainter(
-        bubbleColor: bubble.bubbleColor,
-        borderColor: bubble.borderColor,
-        borderWidth: bubble.borderWidth,
-        bubbleShape: bubble.bubbleShape,
-        tailOffset: bubble.tailOffset,
-      ),
-      child: Padding(
-        padding: EdgeInsets.all(bubble.padding),
-        child: Center(
-          child: Text(
-            bubble.text,
-            style: TextStyle(
-              fontSize: bubble.fontSize,
-              color: bubble.textColor,
-              fontFamily: bubble.fontFamily,
-              fontWeight: bubble.fontWeight,
-              fontStyle: bubble.fontStyle,
-            ),
-            textAlign: TextAlign.center,
-          ),
-        ),
-      ),
-    );
-*/
   }
 
   Map<String, dynamic> _parseBubbleData(PanelElementModel element) {
@@ -1010,7 +896,9 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
         'padding': (parsed['padding'] ?? 12.0).toDouble(),
       };
     } catch (e) {
-      print("Error parsing bubble data: $e");
+      if (kDebugMode) {
+        print("Error parsing bubble data: $e");
+      }
 
       return {
         'text': element.value,
@@ -1038,11 +926,8 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
       case 'text':
         _editTextElement(index);
         break;
-      case 'bubble':
-        _editBubbleElement(index);
-        break;
       default:
-        // Show generic edit options
+      // Show generic edit options
         break;
     }
   }
@@ -1075,29 +960,6 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
         fontStyle: result['fontStyle'],
         padding: result['padding'],
       );
-
-      /* final updatedTextSize = _calculateTextSize(
-        updatedBubble.text,
-        updatedBubble.fontSize,
-        updatedBubble.fontWeight,
-        updatedBubble.fontStyle,
-        updatedBubble.fontFamily,
-      );
-
-      final bubbleWidth = updatedTextSize.width + updatedBubble.padding * 2;
-      final bubbleHeight = updatedTextSize.height + updatedBubble.padding * 2 + 40;
-
-*/
-      /* setState(() {
-        currentElements[index] = element.copyWith(
-          value: jsonEncode(updatedBubble.toMap()),
-          color: updatedBubble.bubbleColor,
-          fontSize: updatedBubble.fontSize,
-          fontFamily: updatedBubble.fontFamily,
-          fontWeight: updatedBubble.fontWeight,
-          fontStyle: updatedBubble.fontStyle,
-        );
-      });*/
       setState(() {
         currentElements[index] = element.copyWith(
           value: jsonEncode(updatedBubble.toMap()),
@@ -1143,27 +1005,6 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
     }
   }
 
-  void _editBubbleElement(int index) async {
-    final element = currentElements[index];
-
-    final result = await showDialog<Map<String, dynamic>>(
-      context: context,
-      builder: (context) => BubbleEditDialog(
-        initialText: element.value,
-        initialColor: element.color ?? Colors.blue,
-      ),
-    );
-
-    if (result != null) {
-      setState(() {
-        currentElements[index] = element.copyWith(
-          value: result['text'],
-          color: result['color'],
-        );
-      });
-    }
-  }
-
   void _addNewElement(PanelElementModel element) {
     setState(() {
       currentElements.add(element);
@@ -1172,11 +1013,6 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
   }
 
   void _addSpeechBubble() async {
-    /* final result = await showDialog(
-      context: context,
-      builder: (_) => const DragSpeechBubbleEditDialog(),
-    );*/
-
     final result = await showDialog<Map<String, dynamic>>(
       context: context,
       builder: (context) => DragSpeechBubbleEditDialog(
@@ -1211,6 +1047,7 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
           fontStyle: result['fontStyle'],
           padding: result['padding'],
           tailOffset: result['tailOffset']);
+
       final textSize = _calculateTextSize(
         bubble.text,
         bubble.fontSize,
@@ -1221,23 +1058,13 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
 
       final bubblePadding = bubble.padding;
 
-      final bubbleWidth = textSize.width + bubblePadding * 2;
-      final bubbleHeight =
-          textSize.height + bubblePadding * 2 + 40; // Extra for tail
-
-      print("Adding bubble with width: $bubbleWidth, height: $bubbleHeight");
-      print("Text Size: $textSize");
-
       final newElement = PanelElementModel(
         id: DateTime.now().millisecondsSinceEpoch.toString(),
         type: 'speech_bubble',
         value: jsonEncode(bubble.toMap()),
-        // 🧠 STORE AS JSON
         offset: const Offset(50, 50),
         width: result['width'],
-        // ✅ Use actual width
         height: result['height'],
-        // ✅ Use actual height
         size: Size(result['width'], result['height']),
       );
 
@@ -1251,7 +1078,7 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
           .findRenderObject() as RenderRepaintBoundary;
       ui.Image image = await boundary.toImage(pixelRatio: 2.0);
       ByteData? byteData =
-          await image.toByteData(format: ui.ImageByteFormat.png);
+      await image.toByteData(format: ui.ImageByteFormat.png);
       return byteData?.buffer.asUint8List();
     } catch (e) {
       print('Error capturing panel image: $e');
@@ -1259,247 +1086,77 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
     }
   }
 
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Edit Panel'),
-        backgroundColor: Colors.blue,
-        foregroundColor: Colors.white,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.undo),
-            onPressed: _isSaving
-                ? null
-                : () {
-                    if (currentElements.isNotEmpty && elementKeys.isNotEmpty) {
-                      setState(() {
-                        // Clear selection if last element is selected
-                        if (selectedElementIndex ==
-                            currentElements.length - 1) {
-                          selectedElementIndex = null;
-                        }
-                        currentElements.removeLast();
-                        elementKeys.removeLast();
-                      });
-                    }
-                  },
-          ),
-          if (selectedElementIndex != null)
-            IconButton(
-              icon: const Icon(Icons.delete),
-              onPressed: () {
-                setState(() {
-                  currentElements.removeAt(selectedElementIndex!);
-                  elementKeys.removeAt(selectedElementIndex!);
-                  selectedElementIndex = null;
-                });
-              },
-            ),
-          ElevatedButton(
-            onPressed: _isSaving ? null : _savePanel,
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.green,
-              foregroundColor: Colors.white,
-            ),
-            child: _isSaving
-                ? const SizedBox(
-                    width: 16,
-                    height: 16,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                    ),
-                  )
-                : const Text('Save Panel'),
-          ),
-          const SizedBox(width: 8),
-        ],
-      ),
-      body: Stack(
-        clipBehavior: Clip.none, // ✅ Allow floating panel overflow
-        children: [
-          Column(
-            children: [
-              // Debug info
-              Container(
-                padding: const EdgeInsets.all(8),
-                color: Colors.grey[200],
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      'Elements: ${currentElements.length} | Editing: $_isEditing',
-                      style: const TextStyle(fontSize: 12),
-                    ),
-                    if (selectedElementIndex != null)
-                      Text(
-                        'Selected: ${currentElements[selectedElementIndex!].type}',
-                        style:
-                            const TextStyle(fontSize: 12, color: Colors.blue),
-                      ),
-                  ],
-                ),
+
+  Widget _buildToolOptions() {
+    return Positioned(
+      left: 0,
+      right: 0,
+      bottom: 16,
+      child: Center(
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+          margin: const EdgeInsets.symmetric(horizontal: 14,vertical: 10),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(30),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black12,
+                blurRadius: 10,
+                offset: Offset(0, 4),
               ),
-
-              // Panel Canvas Area
-              Expanded(
-                child: RepaintBoundary(
-                  key: _panelContentKey,
-                  child: Container(
-                    color: _selectedBackgroundColor,
-                    width: double.infinity,
-                    height: double.infinity,
-                    child: Stack(
-                      clipBehavior: Clip.none,
-                      // ✅ This enables click for Positioned children
-                      children: [
-                        // Grid (optional)
-                        if (_isEditing)
-                          CustomPaint(
-                            size: Size.infinite,
-                            painter: GridPainter(),
-                          ),
-                        // ✅ Drawing Canvas on top of grid
-                        if (isDrawing)
-                          Positioned.fill(
-                            child: DrawingCanvas(
-                                tool: currentTool,
-                                brushSize: selectedBrushSize,
-                                color: drawSelectedColor,
-                                onDrawingComplete: (points) {
-                                  final nonZeroPoints = points
-                                      .where((p) => p != Offset.zero)
-                                      .toList();
-                                  if (nonZeroPoints.isEmpty) {
-                                    setState(() => isDrawing = false);
-                                    return;
-                                  }
-                                  final minX = nonZeroPoints
-                                      .map((p) => p.dx)
-                                      .reduce((a, b) => a < b ? a : b);
-                                  final minY = nonZeroPoints
-                                      .map((p) => p.dy)
-                                      .reduce((a, b) => a < b ? a : b);
-                                  final maxX = nonZeroPoints
-                                      .map((p) => p.dx)
-                                      .reduce((a, b) => a > b ? a : b);
-                                  final maxY = nonZeroPoints
-                                      .map((p) => p.dy)
-                                      .reduce((a, b) => a > b ? a : b);
-
-                                  final boundingWidth = (maxX - minX)
-                                      .clamp(10.0, double.infinity);
-                                  final boundingHeight = (maxY - minY)
-                                      .clamp(10.0, double.infinity);
-
-                                  final normalizedPoints = points
-                                      .map((p) => p - Offset(minX, minY))
-                                      .toList();
-                                  final drawingData = normalizedPoints
-                                      .map((e) => '${e.dx},${e.dy}')
-                                      .join(';');
-
-                                  final newElement = PanelElementModel(
-                                    id: DateTime.now()
-                                        .millisecondsSinceEpoch
-                                        .toString(),
-                                    type: 'Draw',
-                                    value: drawingData,
-                                    offset: Offset(minX, minY),
-                                    width: boundingWidth,
-                                    height: boundingHeight,
-                                    size: Size(boundingWidth, boundingHeight),
-                                    color: drawSelectedColor,
-                                    fontSize:
-                                        selectedBrushSize, // 👈 store strokeWidth here
-                                  );
-
-                                  _addNewElement(newElement);
-                                  setState(() => isDrawing = false);
-                                }),
-                          ),
-
-                        // All existing elements
-                        for (int i = 0; i < currentElements.length; i++)
-                          _buildElementWidget(currentElements[i], i),
-
-                        // Empty state message
-                        if (currentElements.isEmpty)
-                          const Center(
-                            child: Text(
-                              'No elements added yet.\nUse the tools below to add content.',
-                              textAlign: TextAlign.center,
-                              style: TextStyle(
-                                fontSize: 16,
-                                color: Colors.grey,
-                              ),
-                            ),
-                          ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-
-              // Footer toolbar
-              _buildToolOptions(),
             ],
           ),
-
-        /*  // ✅ Floating vertical toolbox ABOVE RepaintBoundary
-          if (selectedElementIndex != null && currentElements[selectedElementIndex!].type == 'text')
-            _buildFloatingToolbox(currentElements[selectedElementIndex!]),
-          if (selectedElementIndex != null &&
-              currentElements[selectedElementIndex!].type == 'image')
-            _buildFloatingToolbox(currentElements[selectedElementIndex!]),*/
-
-          if (selectedElementIndex != null)
-            _buildFloatingToolbox(currentElements[selectedElementIndex!]),
-
-        ],
+          child: SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _toolNavButton(Icons.format_color_fill, 'BG', _pickBackgroundColor),
+                _toolNavButton(Icons.image, 'Image', _uploadImage),
+                _toolNavButton(Icons.insert_emoticon, 'Clipart', () async {
+                  final result = await showCharacterAndClipartPicker(context);
+                  if (result != null && result['type'] == 'character') {
+                    _addCharacterEmoji(result['value']);
+                  }
+                }),
+                _toolNavButton(Icons.chat_bubble, 'Speech Bubble', _addSpeechBubble),
+                _toolNavButton(Icons.text_fields, 'Text', _addTextBox),
+                _toolNavButton(Icons.draw, 'Draw', () {
+                  setState(() => isDrawing = true);
+                  _showDrawingToolsPanel();
+                }),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }
 
-  Widget _buildToolOptions() {
-    return Container(
-      color: Colors.grey[200],
-      padding: const EdgeInsets.symmetric(vertical: 8),
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        child: Row(
-          children: [
-            _toolButton(
-                Icons.format_color_fill, 'Background', _pickBackgroundColor),
-            _toolButton(Icons.image, 'Upload Image', _uploadImage),
-            _toolButton(Icons.insert_emoticon, 'Clip-art', () async {
-              final result = await showCharacterAndClipartPicker(context);
-              if (result != null) {
-             /*   if (result['type'] == 'clipart') {
-                  _addClipArt(IconData(result['value'],
-                      fontFamily: result['fontFamily']));
-                } else */
 
-                  if (result['type'] == 'character') {
-                  _addCharacterEmoji(result['value']);
-                }
-              }
-            }),
-            _toolButton(Icons.chat_bubble, 'Speech Bubble', _addSpeechBubble),
-/*
-            _toolButton(Icons.bubble_chart, 'Bubble', _addBubble),
-*/
-            _toolButton(Icons.text_fields, 'Text', _addTextBox),
-            _toolButton(Icons.draw, 'Draw', () {
-              setState(() => isDrawing = true);
-              _showDrawingToolsPanel();
-            }),
+  Widget _toolNavButton(IconData icon, String label, VoidCallback onTap) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        margin: EdgeInsets.symmetric(horizontal: 10),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 24, color: Colors.black87),
+            SizedBox(height: 4),
+            Text(label, style: TextStyle(fontSize: 12, color: Colors.black87)),
           ],
         ),
       ),
     );
   }
+
+
+
+
+
+
 
   void _showDrawingToolsPanel() {
     showModalBottomSheet(
@@ -1649,20 +1306,6 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
     _addNewElement(newElement);
   }
 
-  void _addBubble() {
-    final newElement = PanelElementModel(
-      id: DateTime.now().millisecondsSinceEpoch.toString(),
-      type: 'bubble',
-      value: 'Bubble',
-      offset: const Offset(50, 50),
-      width: 80,
-      height: 40,
-      size: const Size(80, 40),
-      color: Colors.blue.shade500,
-    );
-    _addNewElement(newElement);
-  }
-
   void _addTextBox() async {
     final result = await showDialog<Map<String, dynamic>>(
       context: context,
@@ -1801,43 +1444,39 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
     )..layout(maxWidth: 300);
     return textPainter.size;
   }
+
+  void _onDrawingComplete(List<Offset> points) {
+    final nonZeroPoints = points.where((p) => p != Offset.zero).toList();
+    if (nonZeroPoints.isEmpty) {
+      setState(() => isDrawing = false);
+      return;
+    }
+
+    final minX = nonZeroPoints.map((p) => p.dx).reduce((a, b) => a < b ? a : b);
+    final minY = nonZeroPoints.map((p) => p.dy).reduce((a, b) => a < b ? a : b);
+    final maxX = nonZeroPoints.map((p) => p.dx).reduce((a, b) => a > b ? a : b);
+    final maxY = nonZeroPoints.map((p) => p.dy).reduce((a, b) => a > b ? a : b);
+
+    final boundingWidth = (maxX - minX).clamp(10.0, double.infinity);
+    final boundingHeight = (maxY - minY).clamp(10.0, double.infinity);
+
+    final normalizedPoints = points.map((p) => p - Offset(minX, minY)).toList();
+    final drawingData = normalizedPoints.map((e) => '${e.dx},${e.dy}').join(';');
+
+    final newElement = PanelElementModel(
+      id: DateTime.now().millisecondsSinceEpoch.toString(),
+      type: 'Draw',
+      value: drawingData,
+      offset: Offset(minX, minY),
+      width: boundingWidth,
+      height: boundingHeight,
+      size: Size(boundingWidth, boundingHeight),
+      color: drawSelectedColor,
+      fontSize: selectedBrushSize, // store strokeWidth
+    );
+
+    _addNewElement(newElement);
+    setState(() => isDrawing = false);
+  }
 }
 
-
-
-/*
-  void _showColorPicker(BuildContext context) {
-    Color pickerColor = selectedColor;
-
-    showDialog(
-      context: context,
-      builder: (context) {
-        return AlertDialog(
-          title: const Text('Pick a Background Color'),
-          content: BlockPicker(
-            pickerColor: pickerColor,
-            onColorChanged: (Color color) {
-              pickerColor = color;
-            },
-          ),
-          actions: [
-            TextButton(
-              child: const Text('Cancel'),
-              onPressed: () => Navigator.of(context).pop(),
-            ),
-            TextButton(
-              child: const Text('Select'),
-              onPressed: () {
-                Navigator.of(context).pop();
-                setState(() {
-                  selectedColor = pickerColor;
-                  // Update the panel background color here
-                });
-              },
-            ),
-          ],
-        );
-      },
-    );
-  }
-*/

@@ -3,13 +3,12 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
-import 'package:fluttertoast/fluttertoast.dart';
 import 'package:printing/printing.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
-
-import '../PanelLayoutEditorScreen.dart';
 import '../PanelModel/Project.dart';
+import '../TestPanelLayoutEditorScreen.dart';
+import 'PDFPageFormat.dart';
 
 
 class AllPagesPreviewScreen extends StatefulWidget {
@@ -47,28 +46,11 @@ class _AllPagesPreviewScreenState extends State<AllPagesPreviewScreen> {
       appBar: AppBar(
         backgroundColor: Colors.black,
         foregroundColor: Colors.white,
-/*
-        title: Text('${widget.projectName} - ${widget.pageFormat} Preview'),
-*/
         title: Text('${widget.projectName} - Preview'),
         actions: [
           IconButton(
             icon: Icon(Icons.download),
-/*
             onPressed: _showExportOptions,
-*/
-            onPressed: () {
-              Fluttertoast.showToast(
-                msg: "Export by page is not supported yet.",
-                toastLength: Toast.LENGTH_SHORT,
-                gravity: ToastGravity.BOTTOM,
-                timeInSecForIosWeb: 1,
-                backgroundColor: Colors.grey[800],
-                textColor: Colors.white,
-                fontSize: 14.0,
-              );
-            },
-
             tooltip: 'Export All Pages',
           ),
         ],

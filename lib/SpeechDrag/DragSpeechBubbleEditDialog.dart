@@ -120,7 +120,6 @@ class _DragSpeechBubbleEditDialogState
                         size: const Size(300, 240),
                         painter: DragSpeechBubblePainter(
                           bubbleColor: _bubbleColor,
-                          // ✅ use updated values
                           borderColor: _borderColor,
                           borderWidth: _borderWidth,
                           bubbleShape: _bubbleShape,
@@ -379,8 +378,8 @@ class _DragSpeechBubbleEditDialogState
               'fontWeight': _fontWeight,
               'fontStyle': _fontStyle,
               'padding': _padding,
-              'width': actualSize.width, // 👈 include size
-              'height': actualSize.height, // 👈 include size
+              'width': actualSize.width,
+              'height': actualSize.height,
             });
           },
 

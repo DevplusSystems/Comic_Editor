@@ -1,53 +1,21 @@
-import 'dart:io';
+import 'dart:math';
 import 'dart:ui';
-
 import 'package:comic_editor/project_hive_model.dart';
 import 'package:comic_editor/project_mapper.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
-import 'package:fluttertoast/fluttertoast.dart';
 import 'package:hive/hive.dart';
-import 'package:path_provider/path_provider.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
-import 'dart:math';
-
-import 'Resizeable/GridPainter.dart';
+import 'PreviewPdf/PDFPageFormat.dart';
 import 'PreviewPdf/PageMarginsPainter.dart';
+import 'Resizeable/GridPainter.dart';
 import 'PanelEditScreen.dart';
 import 'PanelModel/PanelElementModel.dart';
 import 'PanelModel/Project.dart';
 import 'PreviewPdf/AllPagesPreviewScreen.dart';
-import 'PreviewPdf/file_export_service.dart';
-import 'package:pdf/pdf.dart';
-import 'package:pdf/widgets.dart' as pw;
-import 'dart:typed_data';
-
-// PDF Page Format Constants
-class PDFPageFormat {
-  static const double A4_WIDTH = 595.0; // A4 width in points
-  static const double A4_HEIGHT = 842.0; // A4 height in points
-  static const double LETTER_WIDTH = 612.0; // Letter width in points
-  static const double LETTER_HEIGHT = 792.0; // Letter height in points
-  static const double LEGAL_WIDTH = 612.0; // Legal width in points
-  static const double LEGAL_HEIGHT = 1008.0; // Legal height in points
-
-  // Display scaling factor to fit screen
-  static const double DISPLAY_SCALE = 0.6;
-
-  static Map<String, Size> get formats => {
-        'A4': Size(A4_WIDTH * DISPLAY_SCALE, A4_HEIGHT * DISPLAY_SCALE),
-        /*'Letter': Size(LETTER_WIDTH * DISPLAY_SCALE, LETTER_HEIGHT * DISPLAY_SCALE),
-    'Legal': Size(LEGAL_WIDTH * DISPLAY_SCALE, LEGAL_HEIGHT * DISPLAY_SCALE),*/
-      };
-
-  static double get aspectRatioA4 => A4_WIDTH / A4_HEIGHT;
-
-  static double get aspectRatioLetter => LETTER_WIDTH / LETTER_HEIGHT;
-
-  static double get aspectRatioLegal => LEGAL_WIDTH / LEGAL_HEIGHT;
-}
 
 class PanelLayoutEditorScreen extends StatefulWidget {
   final Project project;
@@ -62,64 +30,294 @@ class PanelLayoutEditorScreen extends StatefulWidget {
 class _PanelLayoutEditorScreenState extends State<PanelLayoutEditorScreen> {
   late Project currentProject;
   int currentPageIndex = 0;
-  bool _isExporting = false;
   bool isDrawerOpen = false;
   List<List<LayoutPanel>> pages = [[]];
   int _currentPage = 0;
   LayoutPanel? selectedPanel;
   final GlobalKey _canvasKey = GlobalKey();
   bool _showGrid = false;
-  bool _snapToGrid = false;
-
-  // PDF Page Settings
+  final bool _snapToGrid = false;
   String _selectedPageFormat = 'A4';
   bool _showPageMargins = true;
-  double _pageMargin = 10.0;
+  final double _pageMargin = 10.0;
 
-  late List<GlobalKey> _pageKeys;
+  double _drawerTopOffset = 100.0; // initial vertical position
 
+  Size get _currentPageSize => PDFPageFormat.formats[_selectedPageFormat]!;
 
-/*  @override
-  void initState() {
-    super.initState();
-    currentProject = widget.project;
-    pages = List.from(widget.project.pages);
-  }*/
+  double get _canvasWidth => _currentPageSize.width;
+
+  double get _canvasHeight => _currentPageSize.height;
+
+  List<LayoutPanel> get currentPagePanels => currentProject.pages.isNotEmpty
+      ? currentProject.pages[currentPageIndex]
+      : [];
+
   @override
   void initState() {
     super.initState();
     currentProject = widget.project;
     pages = List.from(widget.project.pages);
 
-    // Add debugging
-    print('=== PanelLayoutEditorScreen INIT ===');
-    print('Project: ${currentProject.name}');
-    print('Pages count: ${pages.length}');
-
+    if (kDebugMode) {
+      print('=== PanelLayoutEditorScreen INIT ===');
+      print('Project: ${currentProject.name}');
+      print('Pages count: ${pages.length}');
+    }
     for (int pageIndex = 0; pageIndex < pages.length; pageIndex++) {
       final page = pages[pageIndex];
-      print('Page $pageIndex: ${page.length} panels');
+      if (kDebugMode) {
+        print('Page $pageIndex: ${page.length} panels');
+      }
 
       for (int panelIndex = 0; panelIndex < page.length; panelIndex++) {
         final panel = page[panelIndex];
-        print('  Panel $panelIndex (${panel.id}): ${panel.elements.length} elements');
+        if (kDebugMode) {
+          print(
+              '  Panel $panelIndex (${panel.id}): ${panel.elements.length} elements');
+        }
 
-        for (int elementIndex = 0; elementIndex < panel.elements.length; elementIndex++) {
+        for (int elementIndex = 0;
+            elementIndex < panel.elements.length;
+            elementIndex++) {
           final element = panel.elements[elementIndex];
-          print('    Element $elementIndex: ${element.type} - "${element.value}"');
+          if (kDebugMode) {
+            print(
+                '    Element $elementIndex: ${element.type} - "${element.value}"');
+          }
         }
       }
     }
   }
 
-  // Get current page dimensions based on selected format
-  Size get _currentPageSize => PDFPageFormat.formats[_selectedPageFormat]!;
+  @override
+  Widget build(BuildContext context) {
+    final screenHeight = MediaQuery.of(context).size.height;
 
-  double get _canvasWidth => _currentPageSize.width;
-  double get _canvasHeight => _currentPageSize.height;
+    return Scaffold(
+      backgroundColor: Colors.white,
+      body: GestureDetector(
+        onHorizontalDragEnd: (details) {
+          if (details.primaryVelocity != null) {
+            if (details.primaryVelocity! > 0) _toggleDrawer(true);
+            if (details.primaryVelocity! < 0) _toggleDrawer(false);
+          }
+        },
+        onTap: () {
+          if (isDrawerOpen) _toggleDrawer(false);
+          setState(() => selectedPanel = null);
+        },
+        child: Stack(
+          children: [
+            Column(
+              children: [
+                _buildAppBar(),
+                Expanded(
+                  child: Center(
+                    child: AspectRatio(
+                      aspectRatio: _canvasWidth / _canvasHeight,
+                      child: LayoutBuilder(
+                        builder: (context, constraints) {
+                          final scaleX = constraints.maxWidth / _canvasWidth;
+                          final scaleY =
+                              constraints.maxHeight / _canvasHeight;
+                          return RepaintBoundary(
+                            key: _canvasKey,
+                            child: Container(
+                              color: Colors.grey[100],
+                              child: DragTarget<LayoutPanel>(
+                                onAcceptWithDetails: (details) {
+                                  final box = _canvasKey.currentContext
+                                      ?.findRenderObject() as RenderBox?;
+                                  if (box != null) {
+                                    final offset =
+                                    box.globalToLocal(details.offset);
+                                    final incoming = details.data;
+                                    final newPanel = LayoutPanel(
+                                      id: incoming.id,
+                                      width: incoming.width,
+                                      height: incoming.height,
+                                      x: (offset.dx - incoming.width / 2)
+                                          .clamp(
+                                          _pageMargin,
+                                          _canvasWidth -
+                                              incoming.width -
+                                              _pageMargin),
+                                      y: (offset.dy - incoming.height / 2)
+                                          .clamp(
+                                          _pageMargin,
+                                          _canvasHeight -
+                                              incoming.height -
+                                              _pageMargin),
+                                      backgroundColor: Colors.white,
+                                    );
+                                    if (!_isOverlapping(newPanel)) {
+                                      setState(() {
+                                        pages[_currentPage].add(newPanel);
+                                      });
+                                    }
+                                  }
+                                },
+                                builder:
+                                    (context, candidateData, rejectedData) {
+                                  return Stack(
+                                    children: [
+                                      if (_showGrid)
+                                        Transform.scale(
+                                          scale: min(scaleX, scaleY),
+                                          alignment: Alignment.topLeft,
+                                          child: _buildGridOverlay(),
+                                        ),
+                                      Transform.scale(
+                                        scale: min(scaleX, scaleY),
+                                        alignment: Alignment.topLeft,
+                                        child: _buildPageMarginsOverlay(),
+                                      ),
+                                      if (pages[_currentPage].isEmpty)
+                                        Center(
+                                          child: Column(
+                                            mainAxisAlignment:
+                                            MainAxisAlignment.center,
+                                            children: [
+                                              Icon(Icons.description_outlined,
+                                                  size: 64,
+                                                  color: Colors.grey[400]),
+                                              const SizedBox(height: 16),
+                                              Text('Empty Page',
+                                                  style: TextStyle(
+                                                      fontSize: 20,
+                                                      color: Colors.grey[600],
+                                                      fontWeight:
+                                                      FontWeight.bold)),
+                                              const SizedBox(height: 8),
+                                              Text(
+                                                  'Add panels or choose a layout template',
+                                                  style: TextStyle(
+                                                      color:
+                                                      Colors.grey[500])),
+                                            ],
+                                          ),
+                                        ),
+                                      ...pages[_currentPage].map((panel) {
+                                        return Positioned(
+                                          left: panel.x * scaleX,
+                                          top: panel.y * scaleY,
+                                          child: GestureDetector(
+                                            onTap: () {
+                                              setState(() {
+                                                selectedPanel =
+                                                selectedPanel == panel
+                                                    ? null
+                                                    : panel;
+                                              });
+                                            },
+                                            onPanUpdate: (details) {
+                                              double newX = panel.x +
+                                                  details.delta.dx / scaleX;
+                                              double newY = panel.y +
+                                                  details.delta.dy / scaleY;
+                                              if (_snapToGrid) {
+                                                newX = (newX / 20).round() *
+                                                    20.0;
+                                                newY = (newY / 20).round() *
+                                                    20.0;
+                                              }
+                                              newX = newX.clamp(
+                                                  _pageMargin,
+                                                  _canvasWidth -
+                                                      panel.width -
+                                                      _pageMargin);
+                                              newY = newY.clamp(
+                                                  _pageMargin,
+                                                  _canvasHeight -
+                                                      panel.height -
+                                                      _pageMargin);
+                                              final movedPanel = panel
+                                                  .copyWith(x: newX, y: newY);
+                                              if (!_isOverlapping(movedPanel,
+                                                  excludePanel: panel)) {
+                                                setState(() {
+                                                  panel.x = newX;
+                                                  panel.y = newY;
+                                                });
+                                              }
+                                            },
+                                            child: Transform.scale(
+                                              scale: min(scaleX, scaleY),
+                                              alignment: Alignment.topLeft,
+                                              child:
+                                              _buildPanelContent(panel),
+                                            ),
+                                          ),
+                                        );
+                                      }).toList(),
+                                    ],
+                                  );
+                                },
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                  ),
+                ),
+                _buildPages(),
+                _buildFooter(),
+              ],
+            ),
+            if (isDrawerOpen)
+              Positioned.fill(
+                child: GestureDetector(
+                  behavior: HitTestBehavior.translucent,
+                  onTap: () => setState(() => isDrawerOpen = false),
+                  child: Container(color: Colors.transparent),
+                ),
+              ),
 
-  List<LayoutPanel> get currentPagePanels =>
-      currentProject.pages.isNotEmpty ? currentProject.pages[currentPageIndex] : [];
+            _buildFloatingDrawerWithToggle(
+                screenHeight, 150, screenHeight * 0.4),
+
+            // Floating Toggle Icon
+            Positioned(
+              left: isDrawerOpen ? 150 : 0,
+              top: _drawerTopOffset + (screenHeight * 0.4 / 2) - 20,
+              child: GestureDetector(
+                onTap: () => setState(() => isDrawerOpen = !isDrawerOpen),
+                onPanUpdate: (details) {
+                  setState(() {
+                    _drawerTopOffset += details.delta.dy;
+                    _drawerTopOffset = _drawerTopOffset.clamp(
+                        0.0, screenHeight - (screenHeight * 0.4));
+                  });
+                },
+                child: Container(
+                  width: 40,
+                  height: 40,
+                  decoration: BoxDecoration(
+                    color: Colors.blueGrey,
+                    borderRadius: BorderRadius.circular(20),
+                    boxShadow: [
+                      BoxShadow(color: Colors.black26, blurRadius: 4)
+                    ],
+                  ),
+                  child: Icon(
+                    isDrawerOpen
+                        ? Icons.arrow_back_ios
+                        : Icons.arrow_forward_ios,
+                    color: Colors.white,
+                    size: 18,
+                  ),
+                ),
+              ),
+            ),
+
+            if (selectedPanel != null) _buildFloatingEditButton(),
+          ],
+        ),
+      ),
+    );
+  }
 
   void _addPage() {
     setState(() {
@@ -144,44 +342,18 @@ class _PanelLayoutEditorScreenState extends State<PanelLayoutEditorScreen> {
     });
   }
 
-  void _deletePanel(LayoutPanel panel) {
-    setState(() {
-      final updatedPages = List<List<LayoutPanel>>.from(currentProject.pages);
-      updatedPages[currentPageIndex].removeWhere((p) => p.id == panel.id);
-      currentProject = currentProject.copyWith(
-        pages: updatedPages,
-        lastModified: DateTime.now(),
-      );
-    });
-  }
-
   void _toggleDrawer(bool open) {
     setState(() => isDrawerOpen = open);
   }
 
-
   void _editSelectedPanel() async {
     if (selectedPanel == null) return;
-
-    print('=== EDITING SELECTED PANEL ===');
-    print('Selected panel ID: ${selectedPanel!.id}');
-
-    // CRITICAL FIX: Always get the panel from the pages array, not selectedPanel
-    final actualPanel = pages[_currentPage].firstWhere((p) => p.id == selectedPanel!.id);
-
-    print('Selected panel elements count: ${selectedPanel!.elements.length}');
-    print('Actual panel elements count: ${actualPanel.elements.length}');
-    print('Are they the same object? ${identical(selectedPanel, actualPanel)}');
-
-    // Debug each element in actual panel
+    final actualPanel =
+        pages[_currentPage].firstWhere((p) => p.id == selectedPanel!.id);
     for (int i = 0; i < actualPanel.elements.length; i++) {
       final element = actualPanel.elements[i];
-      print('Actual panel element $i: ${element.toString()}');
     }
-
-    // Use actualPanel instead of selectedPanel for conversion
     final panelForEditing = actualPanel.toComicPanel();
-    print('Comic panel created with ${panelForEditing.elements.length} elements');
 
     final updatedPanel = await Navigator.push<ComicPanel>(
       context,
@@ -194,93 +366,53 @@ class _PanelLayoutEditorScreenState extends State<PanelLayoutEditorScreen> {
     );
 
     if (updatedPanel != null) {
-      print('=== PANEL UPDATED ===');
-      print('Updated panel elements count: ${updatedPanel.elements.length}');
-
       setState(() {
         final index = pages[_currentPage].indexWhere(
-              (p) => p.id == selectedPanel!.id,
+          (p) => p.id == selectedPanel!.id,
         );
         if (index != -1) {
-          // Update the panel in the pages array
-          pages[_currentPage][index] = actualPanel.updateFromComicPanel(updatedPanel);
-
-          // Update selectedPanel to point to the updated panel
+          pages[_currentPage][index] =
+              actualPanel.updateFromComicPanel(updatedPanel);
           selectedPanel = pages[_currentPage][index];
-
-          // Update currentProject
-          final updatedPages = List<List<LayoutPanel>>.from(currentProject.pages);
-          updatedPages[_currentPage] = List<LayoutPanel>.from(pages[_currentPage]);
+          final updatedPages =
+              List<List<LayoutPanel>>.from(currentProject.pages);
+          updatedPages[_currentPage] =
+              List<LayoutPanel>.from(pages[_currentPage]);
           currentProject = currentProject.copyWith(
             pages: updatedPages,
             lastModified: DateTime.now(),
           );
-
-          print('Panel updated successfully with ${pages[_currentPage][index].elements.length} elements');
         }
       });
     }
   }
 
-// Update your _saveAsDraft method with better debugging
   void _saveAsDraft() async {
-
     final box = Hive.box<ProjectHiveModel>('drafts');
     final updatedProject = currentProject.copyWith(
       pages: pages,
       lastModified: DateTime.now(),
     );
-
-    print('Project pages count: ${updatedProject.pages.length}');
-    for (int pageIndex = 0; pageIndex < updatedProject.pages.length; pageIndex++) {
+    for (int pageIndex = 0;
+        pageIndex < updatedProject.pages.length;
+        pageIndex++) {
       final page = updatedProject.pages[pageIndex];
-      print('Page $pageIndex has ${page.length} panels');
       for (int panelIndex = 0; panelIndex < page.length; panelIndex++) {
         final panel = page[panelIndex];
-        print('Panel $panelIndex (${panel.id}) has ${panel.elements.length} elements');
-        for (int elementIndex = 0; elementIndex < panel.elements.length; elementIndex++) {
+        for (int elementIndex = 0;
+            elementIndex < panel.elements.length;
+            elementIndex++) {
           final element = panel.elements[elementIndex];
-          print('  Element $elementIndex: ${element.type} - ${element.value}');
         }
       }
     }
-
     final hiveModel = toHiveModel(updatedProject);
     await box.put(updatedProject.id, hiveModel);
-
-    // Update current project reference
     currentProject = updatedProject;
-
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('Saved the project for later!')),
     );
   }
-
-/*
-  void _editSelectedPanel() async {
-    if (selectedPanel == null) return;
-    final panelForEditing = selectedPanel!.toComicPanel();
-    final updatedPanel = await Navigator.push<ComicPanel>(
-      context,
-      MaterialPageRoute(
-        builder: (context) => PanelEditScreen(
-          panel: panelForEditing,
-          panelOffset: Offset(selectedPanel!.x, selectedPanel!.y),
-        ),
-      ),
-    );
-    if (updatedPanel != null) {
-      setState(() {
-        final index = pages[_currentPage].indexWhere(
-              (p) => p.id == selectedPanel!.id,
-        );
-        if (index != -1) {
-          pages[_currentPage][index] = selectedPanel!.updateFromComicPanel(updatedPanel);
-        }
-      });
-    }
-  }
-*/
 
   void _deleteSelectedPanel() {
     if (selectedPanel != null) {
@@ -290,60 +422,15 @@ class _PanelLayoutEditorScreenState extends State<PanelLayoutEditorScreen> {
       });
     }
   }
-/*
-  void _addSinglePanel() {
-    final newPanel = LayoutPanel(
-      id: "Panel ${pages[_currentPage].length + 1}",
-      width: _canvasWidth * 0.25,
-      height: _canvasHeight * 0.2,
-      x: _pageMargin,
-      y: _pageMargin,
-      backgroundColor: Colors.white,
-    );
-
-    Offset? freePosition = _findFreePosition(newPanel);
-    if (freePosition != null) {
-      newPanel.x = freePosition.dx;
-      newPanel.y = freePosition.dy;
-    }
-
-    setState(() {
-      pages[_currentPage].add(newPanel);
-    });
-  }*/
-/*
-  void _addSinglePanel() {
-    final panelWidth = (_canvasWidth - (_pageMargin * 2)) / 2; // Two panels per row
-    final panelHeight = _canvasHeight * 0.25;
-
-    final newPanel = LayoutPanel(
-      id: "Panel ${pages[_currentPage].length + 1}",
-      width: panelWidth,
-      height: panelHeight,
-      x: _pageMargin,
-      y: _pageMargin,
-      backgroundColor: Colors.white,
-    );
-
-    Offset? freePosition = _findFreePosition(newPanel);
-    if (freePosition != null) {
-      newPanel.x = freePosition.dx;
-      newPanel.y = freePosition.dy;
-    }
-
-    setState(() {
-      pages[_currentPage].add(newPanel);
-    });
-  }
-*/
 
   void _addSinglePanel() {
-    final panelWidth = (_canvasWidth - (_pageMargin * 2)) / 2; // Two panels per row
+    final panelWidth =
+        (_canvasWidth - (_pageMargin * 2)) / 2; // Two panels per row
     final panelHeight = _canvasHeight * 0.25;
 
     final newPanel = LayoutPanel(
       // id: "Panel_${DateTime.now().microsecondsSinceEpoch}", // Unique ID always
-      id: "Panel ${pages[_currentPage].length + 1}", // 👈 Human-readable ID
+      id: "Panel ${pages[_currentPage].length + 1}",
       width: panelWidth,
       height: panelHeight,
       x: _pageMargin,
@@ -372,7 +459,6 @@ class _PanelLayoutEditorScreenState extends State<PanelLayoutEditorScreen> {
     });
   }
 
-
   bool get _canAddMorePanels {
     final panelWidth = (_canvasWidth - (_pageMargin * 2)) / 2;
     final panelHeight = _canvasHeight * 0.25;
@@ -387,40 +473,6 @@ class _PanelLayoutEditorScreenState extends State<PanelLayoutEditorScreen> {
     return _findFreePosition(testPanel) != null;
   }
 
-
-
-
-/*
-  Offset? _findFreePosition(LayoutPanel panel) {
-    final maxX = _canvasWidth - panel.width - _pageMargin;
-    final maxY = _canvasHeight - panel.height - _pageMargin;
-
-    for (double y = _pageMargin; y < maxY; y += 50) {
-      for (double x = _pageMargin; x < maxX; x += 50) {
-        final testPanel = panel.copyWith(x: x, y: y);
-        if (!_isOverlapping(testPanel)) {
-          return Offset(x, y);
-        }
-      }
-    }
-    return null;
-  }
-*/
-  /*Offset? _findFreePosition(LayoutPanel panel) {
-    final maxX = _canvasWidth - panel.width - _pageMargin;
-    final maxY = _canvasHeight - panel.height - _pageMargin;
-
-    // Use panel dimensions for precise grid layout without extra gaps
-    for (double y = _pageMargin; y <= maxY; y += panel.height) {
-      for (double x = _pageMargin; x <= maxX; x += panel.width) {
-        final testPanel = panel.copyWith(x: x, y: y);
-        if (!_isOverlapping(testPanel)) {
-          return Offset(x, y);
-        }
-      }
-    }
-    return null;
-  }*/
   Offset? _findFreePosition(LayoutPanel panel) {
     const double rowSpacing = 20.0; // space between rows
     const int panelsPerRow = 2;
@@ -447,8 +499,6 @@ class _PanelLayoutEditorScreenState extends State<PanelLayoutEditorScreen> {
     return null;
   }
 
-
-
   void _switchPage(int index) {
     setState(() {
       _currentPage = index;
@@ -469,192 +519,6 @@ class _PanelLayoutEditorScreenState extends State<PanelLayoutEditorScreen> {
     );
   }
 
-  void _showPageFormatOptions() {
-    showModalBottomSheet(
-      context: context,
-      builder: (context) => Container(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Text(
-              'PDF Page Format',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 16),
-            ...PDFPageFormat.formats.entries.map((entry) {
-              final format = entry.key;
-              final size = entry.value;
-              return ListTile(
-                leading: Icon(
-                  Icons.description,
-                  color:
-                      _selectedPageFormat == format ? Colors.blue : Colors.grey,
-                ),
-                title: Text(format),
-                subtitle:
-                    Text('${size.width.toInt()} × ${size.height.toInt()} pts'),
-                trailing: _selectedPageFormat == format
-                    ? Icon(Icons.check, color: Colors.blue)
-                    : null,
-                onTap: () {
-                  setState(() {
-                    _selectedPageFormat = format;
-                  });
-                  Navigator.pop(context);
-                },
-              );
-            }).toList(),
-            const Divider(),
-            SwitchListTile(
-              title: Text('Show Page Margins'),
-              subtitle: Text('Display printable area guides'),
-              value: _showPageMargins,
-              onChanged: (value) {
-                setState(() {
-                  _showPageMargins = value;
-                });
-              },
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-/*  void _showExportOptions() {
-    showModalBottomSheet(
-      context: context,
-      builder: (context) => Container(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Text(
-              'Export Options',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Current format: $_selectedPageFormat',
-              style: TextStyle(color: Colors.grey[600]),
-            ),
-            const SizedBox(height: 16),
-            ListTile(
-              leading: const Icon(Icons.image),
-              title: const Text('Export as PNG'),
-              subtitle: Text('High-resolution $_selectedPageFormat format'),
-              onTap: () {
-                Navigator.pop(context);
-                _exportAs('PNG');
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.picture_as_pdf),
-              title: const Text('Export as PDF'),
-              subtitle: Text('Professional $_selectedPageFormat document'),
-              onTap: () {
-                Navigator.pop(context);
-                _exportAs('PDF');
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.code),
-              title: const Text('Export as JSON'),
-              subtitle: const Text('Export project data'),
-              onTap: () {
-                Navigator.pop(context);
-                _exportAs('JSON');
-              },
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  void _exportAs(String format) async {
-    setState(() {
-      _isExporting = true;
-    });
-    try {
-      switch (format) {
-        case 'PNG':
-          await FileExportService.exportAllPagesAsPNG(
-            context: context,
-            pages: pages,
-            projectName: currentProject.name,
-            canvasWidth: _canvasWidth,
-            canvasHeight: _canvasHeight,
-            pageFormat: _selectedPageFormat,
-          );
-          break;
-        case 'PDF':
-          await FileExportService.exportAllPagesAsPDF(
-            context: context,
-            pages: pages,
-            projectName: currentProject.name,
-            canvasWidth: _canvasWidth,
-            canvasHeight: _canvasHeight,
-            pageFormat: _selectedPageFormat,
-          );
-          break;
-        case 'JSON':
-          await FileExportService.exportProjectAsJSON(
-            context: context,
-            project: currentProject.copyWith(pages: pages),
-          );
-          break;
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Export error: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-    } finally {
-      if (mounted) {
-        setState(() {
-          _isExporting = false;
-        });
-      }
-    }
-  }*/
-
-  void _exportCurrentPageAsPNG() async {
-    setState(() {
-      _isExporting = true;
-    });
-    try {
-      await FileExportService.exportAllPagesAsPNG(
-        context: context,
-        pages: [pages[_currentPage]],
-        projectName: '${currentProject.name}_page_${_currentPage + 1}',
-        canvasWidth: _canvasWidth,
-        canvasHeight: _canvasHeight,
-        pageFormat: _selectedPageFormat,
-      );
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Export error: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-    } finally {
-      if (mounted) {
-        setState(() {
-          _isExporting = false;
-        });
-      }
-    }
-  }
-
   void _showLayoutTemplates() {
     showModalBottomSheet(
       context: context,
@@ -673,9 +537,6 @@ class _PanelLayoutEditorScreenState extends State<PanelLayoutEditorScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       const Text(
-                        // 'PDF Layout Templates',
-
-                        /*   'PDF Layout Templates',*/
                         'Layout Templates',
                         style: TextStyle(
                           fontSize: 20,
@@ -699,79 +560,6 @@ class _PanelLayoutEditorScreenState extends State<PanelLayoutEditorScreen> {
                 ],
               ),
               const SizedBox(height: 16),
-/*
-              Expanded(
-                child: GridView.count(
-                  crossAxisCount: 2,
-                  crossAxisSpacing: 16,
-                  mainAxisSpacing: 16,
-                  children: [
-                    _buildLayoutTemplate(
-                      'Single Column',
-                      'Full-width layout',
-                      Icons.view_agenda,
-                      Colors.blue,
-                      _applySingleColumnLayout,
-                    ),
-                    _buildLayoutTemplate(
-                      'Two Columns',
-                      'Side-by-side panels',
-                      Icons.view_column,
-                      Colors.green,
-                      _applyTwoColumnLayout,
-                    ),
-                    _buildLayoutTemplate(
-                      'Three Columns',
-                      'Triple column layout',
-                      Icons.view_week,
-                      Colors.orange,
-                      _applyThreeColumnLayout,
-                    ),
-                    _buildLayoutTemplate(
-                      'Grid 2x2',
-                      'Four equal panels',
-                      Icons.grid_4x4,
-                      Colors.purple,
-                      _applyGrid2x2Layout,
-                    ),
-                    _buildLayoutTemplate(
-                      'Header + Content',
-                      'Title with body panels',
-                      Icons.article,
-                      Colors.red,
-                      _applyHeaderContentLayout,
-                    ),
-                    _buildLayoutTemplate(
-                      'Magazine Style',
-                      'Mixed panel sizes',
-                      Icons.auto_stories,
-                      Colors.teal,
-                      _applyMagazineLayout,
-                    ),
-                    _buildLayoutTemplate(
-                      'Comic Strip',
-                      'Horizontal sequence',
-                      Icons.movie_filter,
-                      Colors.indigo,
-                      _applyComicStripLayout,
-                    ),
-                    _buildLayoutTemplate(
-                      'Clear All',
-                      'Remove all panels',
-                      Icons.clear_all,
-                      Colors.grey,
-                      () {
-                        setState(() {
-                          pages[_currentPage].clear();
-                          selectedPanel = null;
-                        });
-                      },
-                    ),
-                  ],
-                ),
-              ),
-*/
-
               Expanded(
                 child: GridView.count(
                   crossAxisCount: 2,
@@ -839,7 +627,7 @@ class _PanelLayoutEditorScreenState extends State<PanelLayoutEditorScreen> {
                       'Remove all panels',
                       Icons.clear_all,
                       Colors.grey,
-                          () {
+                      () {
                         setState(() {
                           pages[_currentPage].clear();
                           selectedPanel = null;
@@ -849,7 +637,6 @@ class _PanelLayoutEditorScreenState extends State<PanelLayoutEditorScreen> {
                   ],
                 ),
               ),
-
             ],
           ),
         );
@@ -858,12 +645,12 @@ class _PanelLayoutEditorScreenState extends State<PanelLayoutEditorScreen> {
   }
 
   Widget _buildLayoutTemplate(
-      String title,
-      String description,
-      IconData icon,
-      Color color,
-      VoidCallback onTap,
-      ) {
+    String title,
+    String description,
+    IconData icon,
+    Color color,
+    VoidCallback onTap,
+  ) {
     return Card(
       elevation: 4,
       child: InkWell(
@@ -903,7 +690,6 @@ class _PanelLayoutEditorScreenState extends State<PanelLayoutEditorScreen> {
     );
   }
 
-  // PDF-optimized layout templates
   void _applySingleColumnLayout() {
     final contentWidth = _canvasWidth - (2 * _pageMargin);
     final panelHeight = (_canvasHeight - (4 * _pageMargin)) / 3;
@@ -1112,10 +898,12 @@ class _PanelLayoutEditorScreenState extends State<PanelLayoutEditorScreen> {
       selectedPanel = null;
     });
   }
+
   void _applyTwoRowLayout() {
     final contentWidth = _canvasWidth - (3 * _pageMargin);
     final topPanelHeight = _canvasHeight * 0.4;
-    final bottomPanelHeight = _canvasHeight - topPanelHeight - (3 * _pageMargin);
+    final bottomPanelHeight =
+        _canvasHeight - topPanelHeight - (3 * _pageMargin);
 
     setState(() {
       pages[_currentPage] = [
@@ -1160,7 +948,8 @@ class _PanelLayoutEditorScreenState extends State<PanelLayoutEditorScreen> {
         ),
         LayoutPanel(
           id: "Sidebar Top",
-          x: _pageMargin + leftPanelWidth + _pageMargin, // ✅ corrected here
+          x: _pageMargin + leftPanelWidth + _pageMargin,
+          // corrected here
           y: _pageMargin,
           width: rightPanelWidth,
           height: topRightHeight,
@@ -1168,7 +957,8 @@ class _PanelLayoutEditorScreenState extends State<PanelLayoutEditorScreen> {
         ),
         LayoutPanel(
           id: "Sidebar Bottom",
-          x: _pageMargin + leftPanelWidth + _pageMargin, // ✅ same fix
+          x: _pageMargin + leftPanelWidth + _pageMargin,
+          // same fix
           y: _pageMargin + topRightHeight + _pageMargin,
           width: rightPanelWidth,
           height: bottomRightHeight,
@@ -1214,8 +1004,9 @@ class _PanelLayoutEditorScreenState extends State<PanelLayoutEditorScreen> {
   }
 
   Widget _buildLivePanelContent(LayoutPanel panel) {
-
-    print("Panel: ${panel.label} ID: ${panel.id}");
+    if (kDebugMode) {
+      print("Panel: ${panel.label} ID: ${panel.id}");
+    }
     return Container(
       color: panel.backgroundColor,
       child: Stack(
@@ -1225,7 +1016,7 @@ class _PanelLayoutEditorScreenState extends State<PanelLayoutEditorScreen> {
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                 /* Icon(
+                  /* Icon(
                     Icons.add_photo_alternate_outlined,
                     size: 30,
                     color: Colors.grey[400],
@@ -1239,7 +1030,7 @@ class _PanelLayoutEditorScreenState extends State<PanelLayoutEditorScreen> {
                       fontSize: 14,
                     ),
                   ),
-                 /* const SizedBox(height: 4),
+                  /* const SizedBox(height: 4),
                   Text(
                     'Tap to select',
                     style: TextStyle(
@@ -1275,210 +1066,6 @@ class _PanelLayoutEditorScreenState extends State<PanelLayoutEditorScreen> {
         marginSize: _pageMargin,
         pageWidth: _canvasWidth,
         pageHeight: _canvasHeight,
-      ),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final screenWidth = MediaQuery.of(context).size.width;
-    final screenHeight = MediaQuery.of(context).size.height;
-    final double padding = 16;
-    final double panelWidthLeft = screenWidth * 0.45;
-    final double panelWidthRight = screenWidth * 0.45;
-    final double panelHeightTall = (screenHeight - 3 * padding) / 2;
-    final double panelHeightSmall = (screenHeight - 4 * padding) / 3;
-
-    return Scaffold(
-      body: GestureDetector(
-        onHorizontalDragEnd: (details) {
-          if (details.primaryVelocity != null) {
-            if (details.primaryVelocity! > 0) _toggleDrawer(true);
-            if (details.primaryVelocity! < 0) _toggleDrawer(false);
-          }
-        },
-        onTap: () {
-          if (isDrawerOpen) _toggleDrawer(false);
-          setState(() => selectedPanel = null);
-        },
-        child: Stack(
-          children: [
-            Column(
-              children: [
-                _buildAppBar(),
-                Expanded(
-                  child: Center(
-                    child: Container(
-                      child: RepaintBoundary(
-                        // ✅ Added
-                        key: _canvasKey,
-                        child: Container(
-                          width: _canvasWidth,
-                          height: _canvasHeight,
-                          margin: const EdgeInsets.symmetric(vertical: 14),
-                          padding: const EdgeInsets.all(2),
-                          decoration: BoxDecoration(
-                            color: Colors.grey[200],
-                          ),
-                          child: DragTarget<LayoutPanel>(
-                            onAcceptWithDetails: (details) {
-                              final box = _canvasKey.currentContext
-                                  ?.findRenderObject() as RenderBox?;
-                              if (box != null) {
-                                final offset =
-                                    box.globalToLocal(details.offset);
-                                final incoming = details.data;
-                                final newPanel = LayoutPanel(
-                                  id: incoming.id,
-                                  width: incoming.width,
-                                  height: incoming.height,
-                                  x: (offset.dx - incoming.width / 2).clamp(
-                                      _pageMargin,
-                                      _canvasWidth -
-                                          incoming.width -
-                                          _pageMargin),
-                                  y: (offset.dy - incoming.height / 2).clamp(
-                                      _pageMargin,
-                                      _canvasHeight -
-                                          incoming.height -
-                                          _pageMargin),
-                                  backgroundColor: Colors.white,
-                                );
-                                if (!_isOverlapping(newPanel)) {
-                                  setState(() {
-                                    pages[_currentPage].add(newPanel);
-                                  });
-                                }
-                              }
-                            },
-                            builder: (context, candidateData, rejectedData) {
-                              return Stack(
-                                children: [
-                                  if (_showGrid) _buildGridOverlay(),
-                                  _buildPageMarginsOverlay(),
-                                  if (pages[_currentPage].isEmpty)
-                                    Center(
-                                      child: Column(
-                                        mainAxisAlignment:
-                                            MainAxisAlignment.center,
-                                        children: [
-                                          Icon(
-                                            Icons.description_outlined,
-                                            size: 64,
-                                            color: Colors.grey[400],
-                                          ),
-                                          const SizedBox(height: 16),
-                                          Text(
-
-                                            // remove the text showing the  page format
-
-/*
-                                            'Empty $_selectedPageFormat Page',
-*/
-                                            'Empty Page',
-                                            style: TextStyle(
-                                              fontSize: 20,
-                                              color: Colors.grey[600],
-                                              fontWeight: FontWeight.bold,
-                                            ),
-                                          ),
-                                          const SizedBox(height: 8),
-                                          Text(
-                                            'Add panels or choose a layout template',
-                                            style: TextStyle(
-                                              color: Colors.grey[500],
-                                            ),
-                                          ),
-                                          const SizedBox(height: 8),
-                                          /*Text(
-                                            '${_canvasWidth.toInt()} × ${_canvasHeight.toInt()} pts',
-                                            style: TextStyle(
-                                              color: Colors.grey[400],
-                                              fontSize: 12,
-                                            ),
-                                          ),*/
-                                        ],
-                                      ),
-                                    ),
-                                  ...pages[_currentPage].map((panel) {
-                                    return Positioned(
-                                      left: panel.x,
-                                      top: panel.y,
-                                      child: GestureDetector(
-                                        /* onTap: () {
-                                      setState(() {
-                                        selectedPanel = selectedPanel == panel ? null : panel;
-                                      });
-                                    },*/
-
-                                        onTap: () {
-                                          setState(() {
-                                            if (selectedPanel == panel) {
-                                              selectedPanel = null;
-                                            } else {
-                                              // CRITICAL FIX: Ensure selectedPanel points to the actual panel in pages array
-                                              final actualPanel =
-                                                  pages[_currentPage]
-                                                      .firstWhere((p) =>
-                                                          p.id == panel.id);
-                                              selectedPanel = actualPanel;
-                                              print(
-                                                  'Selected panel ${actualPanel.id} with ${actualPanel.elements.length} elements');
-                                            }
-                                          });
-                                        },
-                                        onPanUpdate: (details) {
-                                          double newX =
-                                              panel.x + details.delta.dx;
-                                          double newY =
-                                              panel.y + details.delta.dy;
-                                          if (_snapToGrid) {
-                                            newX = (newX / 20).round() * 20.0;
-                                            newY = (newY / 20).round() * 20.0;
-                                          }
-                                          newX = newX.clamp(
-                                              _pageMargin,
-                                              _canvasWidth -
-                                                  panel.width -
-                                                  _pageMargin);
-                                          newY = newY.clamp(
-                                              _pageMargin,
-                                              _canvasHeight -
-                                                  panel.height -
-                                                  _pageMargin);
-                                          final movedPanel =
-                                              panel.copyWith(x: newX, y: newY);
-                                          if (!_isOverlapping(movedPanel,
-                                              excludePanel: panel)) {
-                                            setState(() {
-                                              panel.x = newX;
-                                              panel.y = newY;
-                                            });
-                                          }
-                                        },
-                                        child: _buildPanelContent(panel),
-                                      ),
-                                    );
-                                  }).toList(),
-                                ],
-                              );
-                            },
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-                _buildPages(),
-                _buildFooter(),
-              ],
-            ),
-            _buildDrawer(screenWidth, screenHeight, padding, panelWidthLeft,
-                panelWidthRight, panelHeightTall, panelHeightSmall),
-            _buildDrawerToggle(),
-            if (selectedPanel != null) _buildFloatingEditButton(),
-          ],
-        ),
       ),
     );
   }
@@ -1571,7 +1158,8 @@ class _PanelLayoutEditorScreenState extends State<PanelLayoutEditorScreen> {
       height: 60,
       margin: EdgeInsets.only(top: MediaQuery.of(context).padding.top),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: Colors.yellow.shade50,
+        borderRadius: BorderRadius.circular(10),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withOpacity(0.1),
@@ -1580,7 +1168,7 @@ class _PanelLayoutEditorScreenState extends State<PanelLayoutEditorScreen> {
           ),
         ],
       ),
-      padding: EdgeInsets.symmetric(horizontal: 16),
+      padding: EdgeInsets.symmetric(horizontal: 10,vertical: 5),
       child: Row(
         children: [
           IconButton(
@@ -1608,42 +1196,14 @@ class _PanelLayoutEditorScreenState extends State<PanelLayoutEditorScreen> {
                   ),
                   overflow: TextOverflow.ellipsis,
                 ),
-
-                // remove the text showing the  page format
-
-                /*  Text(
-                  '$_selectedPageFormat Format',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: Colors.grey[600],
-                  ),
-                ),*/
               ],
             ),
           ),
-          /*_buildAppBarButton(
-            icon: Icons.settings,
-            label: 'Page Format',
-            onPressed: _showPageFormatOptions,
-          ),*/
           SizedBox(width: 8),
           _buildAppBarButton(
             icon: Icons.download,
             label: 'Export',
-/*
             onPressed: _showExportOptions,
-*/
-            onPressed: () {
-
-              Fluttertoast.showToast(
-                msg: "Exporting by page is not supported yet.",
-                toastLength: Toast.LENGTH_SHORT,
-                gravity: ToastGravity.BOTTOM,
-                backgroundColor: Colors.grey[800],
-                textColor: Colors.white,
-                fontSize: 14.0,
-              );
-            },
           ),
           SizedBox(width: 8),
           _buildAppBarButton(
@@ -1671,7 +1231,6 @@ class _PanelLayoutEditorScreenState extends State<PanelLayoutEditorScreen> {
               });
             },
           ),
-
           SizedBox(width: 8),
           _buildAppBarButton(
             icon: Icons.dashboard_customize,
@@ -1714,146 +1273,73 @@ class _PanelLayoutEditorScreenState extends State<PanelLayoutEditorScreen> {
     );
   }
 
- /* Widget _buildDrawer(
-      double screenWidth,
-      double screenHeight,
-      double padding,
-      double panelWidthLeft,
-      double panelWidthRight,
-      double panelHeightTall,
-      double panelHeightSmall) {
-    return AnimatedPositioned(
-      duration: Duration(milliseconds: 300),
-      left: isDrawerOpen ? 0 : -150,
-      top: 0,
-      bottom: 0,
-      child: Container(
-        width: 150,
-        color: Colors.blueGrey.shade100,
-        padding: EdgeInsets.only(top: 60, left: 8, right: 8),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            Text('Created Panels', style: TextStyle(fontWeight: FontWeight.bold)),
-            SizedBox(height: 10),
-            _buildDraggablePanel(Colors.red, 'Header', 0, 0, _canvasWidth * 0.3,
-                _canvasHeight * 0.15),
-            SizedBox(height: 10),
-            _buildDraggablePanel(Colors.green, 'Content', 0, 0,
-                _canvasWidth * 0.25, _canvasHeight * 0.2),
-            SizedBox(height: 10),
-            _buildDraggablePanel(Colors.blue, 'Sidebar', 0, 0,
-                _canvasWidth * 0.2, _canvasHeight * 0.3),
-            SizedBox(height: 10),
-            _buildDraggablePanel(Colors.orange, 'Footer', 0, 0,
-                _canvasWidth * 0.3, _canvasHeight * 0.1),
-            SizedBox(height: 10),
-            _buildDraggablePanel(Colors.purple, 'Image', 0, 0,
-                _canvasWidth * 0.25, _canvasHeight * 0.25),
-          ],
-        ),
-      ),
+  _buildDraggablePanel(
+      {required MaterialColor color,
+      required String label,
+      required double width,
+      required double height}) {
+    final layoutPanel = LayoutPanel(
+      id: '$label ${pages[_currentPage].length + 1}',
+      label: label,
+      width: width,
+      height: height,
+      x: 0,
+      y: 0,
+      backgroundColor: Colors.white,
+      customText: label,
     );
-  }*/
+    return Draggable<LayoutPanel>(
+      onDragStarted: () {
+        if (isDrawerOpen) {
+          setState(() {
+            isDrawerOpen = false;
+          });
+        }
+      },
+      data: layoutPanel,
+      feedback: Material(
+        color: Colors.transparent,
+        child: _buildPanelPreview(label, color, width, height, scale: 0.2),
+      ),
+      childWhenDragging: Opacity(
+        opacity: 0.4,
+        child: _buildPanelPreview(label, color, width, height, scale: 0.25),
+      ),
+      child: _buildPanelPreview(label, color, width, height, scale: 0.25),
+    );
+  }
 
-  Widget _buildDrawer(
-      double screenWidth,
-      double screenHeight,
-      double padding,
-      double panelWidthLeft,
-      double panelWidthRight,
-      double panelHeightTall,
-      double panelHeightSmall,
-      ) {
-    return AnimatedPositioned(
-      duration: Duration(milliseconds: 300),
-      left: isDrawerOpen ? 0 : -150,
-      top: 0,
-      bottom: 0,
-      child: Container(
-        width: 150,
-        color: Colors.blueGrey.shade100,
-        padding: EdgeInsets.only(top: 60, left: 8, right: 8),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            Text('Created Panels', style: TextStyle(fontWeight: FontWeight.bold)),
-            SizedBox(height: 12),
+  Widget _buildPanelPreview(
+    String label,
+    Color color,
+    double width,
+    double height, {
+    double scale = 1.0,
+  }) {
+    final visualWidth = width * scale;
+    final visualHeight = height * scale;
 
-            // Rounded rectangle (wide)
-            _buildDraggablePanel
-              (
-              Colors.red,
-              'Wide',
-              0,
-              0,
-              _canvasWidth - 2 * _pageMargin, // ✅ full width respecting margins
-              _canvasHeight * 0.2,
-            ),
-            SizedBox(height: 12),
-
-            _buildDraggablePanel(
-              Colors.teal,
-              'Two Half', // draggable label
-              0,
-              0,
-              (_canvasWidth - 2 * _pageMargin) / 2, // ✅ visually half-width in drawer
-              _canvasHeight * 0.2,
-            ),
-
-            SizedBox(height: 12),
-
-            // Vertical rectangle (tall)
-            _buildDraggablePanel(
-              Colors.green,
-              'Tall',
-              0,
-              0,
-              _canvasWidth * 0.35,
-              _canvasHeight * 0.5,
-            ),
-
-            SizedBox(height: 12),
-
-            // Medium square panel
-            _buildDraggablePanel(
-              Colors.orange,
-              'Square',
-              0,
-              0,
-              _canvasWidth * 0.4,
-              _canvasWidth * 0.4,
-            ),
-
-            SizedBox(height: 12),
-
-            // Short wide panel (like footer)
-            _buildDraggablePanel(
-              Colors.blue,
-              'Short',
-              0,
-              0,
-              _canvasWidth * 0.7,
-              _canvasHeight * 0.12,
-            ),
-
-            SizedBox(height: 12),
-
-            // Small bubble panel
-            _buildDraggablePanel(
-              Colors.purple,
-              'Small ',
-              0,
-              0,
-              _canvasWidth * 0.25,
-              _canvasHeight * 0.12,
-            ),
-          ],
+    return Container(
+      width: visualWidth.clamp(60.0, 140.0),
+      height: visualHeight.clamp(40.0, 120.0),
+      decoration: BoxDecoration(
+        color: color,
+        borderRadius: BorderRadius.circular(6),
+        boxShadow: [BoxShadow(color: Colors.black26, blurRadius: 2)],
+      ),
+      alignment: Alignment.center,
+      child: FittedBox(
+        child: Text(
+          label,
+          style: TextStyle(
+            color: Colors.white,
+            fontWeight: FontWeight.bold,
+          ),
+          textAlign: TextAlign.center,
         ),
       ),
     );
   }
-
 
   Widget _buildDrawerToggle() {
     return Positioned(
@@ -1882,7 +1368,7 @@ class _PanelLayoutEditorScreenState extends State<PanelLayoutEditorScreen> {
   Widget _buildPages() {
     return Container(
       color: Colors.grey.shade200,
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
       child: Row(
         children: [
           const Text("Pages:", style: TextStyle(fontWeight: FontWeight.bold)),
@@ -1905,31 +1391,6 @@ class _PanelLayoutEditorScreenState extends State<PanelLayoutEditorScreen> {
                 : null,
           ),
           const Spacer(),
-
-          // remove the text showing the  page format
-          /*Text(
-            '$_selectedPageFormat',
-            style: TextStyle(
-              fontSize: 12,
-              color: Colors.grey[600],
-              fontWeight: FontWeight.bold,
-            ),
-          ),*/
-
-
-         /* Row(
-            children: [
-              Checkbox(
-                value: _snapToGrid,
-                onChanged: (value) {
-                  setState(() {
-                    _snapToGrid = value ?? false;
-                  });
-                },
-              ),
-              Text('Snap to Grid', style: TextStyle(fontSize: 12)),
-            ],
-          ),*/
         ],
       ),
     );
@@ -1938,7 +1399,7 @@ class _PanelLayoutEditorScreenState extends State<PanelLayoutEditorScreen> {
   Widget _buildFooter() {
     return Container(
       color: Colors.grey.shade200,
-      padding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      padding: EdgeInsets.symmetric(horizontal: 16, vertical: 5),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -1946,23 +1407,13 @@ class _PanelLayoutEditorScreenState extends State<PanelLayoutEditorScreen> {
             scrollDirection: Axis.horizontal,
             child: Row(
               children: [
-               /* ElevatedButton.icon(
-                  onPressed: _addSinglePanel,
-                  icon: Icon(Icons.add, size: 18),
-                  label: Text("Add Panel"),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.blue,
-                    foregroundColor: Colors.white,
-                    padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                  ),
-                ),
-*/
                 ElevatedButton.icon(
                   onPressed: _canAddMorePanels ? _addSinglePanel : null,
                   icon: Icon(Icons.add, size: 18),
                   label: Text("Add Panel"),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: _canAddMorePanels ? Colors.blue : Colors.grey,
+                    backgroundColor:
+                        _canAddMorePanels ? Colors.blue : Colors.grey,
                     foregroundColor: Colors.white,
                   ),
                 ),
@@ -1973,7 +1424,7 @@ class _PanelLayoutEditorScreenState extends State<PanelLayoutEditorScreen> {
                   label: Text("Edit Panel"),
                   style: ElevatedButton.styleFrom(
                     backgroundColor:
-                    selectedPanel != null ? Colors.orange : Colors.grey,
+                        selectedPanel != null ? Colors.orange : Colors.grey,
                     foregroundColor: Colors.white,
                     padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                   ),
@@ -1981,12 +1432,12 @@ class _PanelLayoutEditorScreenState extends State<PanelLayoutEditorScreen> {
                 SizedBox(width: 8),
                 ElevatedButton.icon(
                   onPressed:
-                  selectedPanel != null ? _deleteSelectedPanel : null,
+                      selectedPanel != null ? _deleteSelectedPanel : null,
                   icon: Icon(Icons.delete, size: 18),
                   label: Text("Delete Panel"),
                   style: ElevatedButton.styleFrom(
                     backgroundColor:
-                    selectedPanel != null ? Colors.red : Colors.grey,
+                        selectedPanel != null ? Colors.red : Colors.grey,
                     foregroundColor: Colors.white,
                     padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                   ),
@@ -2002,20 +1453,6 @@ class _PanelLayoutEditorScreenState extends State<PanelLayoutEditorScreen> {
                     padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                   ),
                 ),
-               /* SizedBox(width: 8),
-                ElevatedButton.icon(
-                  onPressed: _exportCurrentPageAsPNG,
-                  icon: Icon(Icons.photo_camera, size: 18),
-                  label: Text("Export Page"),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.purple,
-                    foregroundColor: Colors.white,
-                    padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                  ),
-                ),*/
-
-
-
                 SizedBox(width: 8),
                 ElevatedButton.icon(
                   onPressed: () {
@@ -2023,9 +1460,9 @@ class _PanelLayoutEditorScreenState extends State<PanelLayoutEditorScreen> {
                   },
                   icon: Icon(Icons.save),
                   label: Text("Save"),
-                  style:
-                      ElevatedButton.styleFrom(backgroundColor: Colors.green,
-                          foregroundColor: Colors.white),
+                  style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.green,
+                      foregroundColor: Colors.white),
                 ),
                 SizedBox(width: 8),
                 ElevatedButton.icon(
@@ -2053,248 +1490,46 @@ class _PanelLayoutEditorScreenState extends State<PanelLayoutEditorScreen> {
               ],
             ),
           ),
-          SizedBox(height: 8),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              if (selectedPanel != null)
-                Text(
-                  'Selected: ${selectedPanel!.id}',
-                  style: TextStyle(
-                    color: Colors.blue.shade700,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 12,
-                  ),
-                ),
-              if (selectedPanel == null)
-                Text(
-                  'No panel selected',
-                  style: TextStyle(
-                    color: Colors.grey[600],
-                    fontSize: 12,
-                  ),
-                ),
-              Text(
-                // remove the text showing the  page format
-/*
-                '${pages[_currentPage].length} panel${pages[_currentPage].length != 1 ? 's' : ''} • $_selectedPageFormat',
-*/
-                '${pages[_currentPage].length} panel${pages[_currentPage].length != 1 ? 's' : ''}',
-
-                style: TextStyle(
-                  color: Colors.grey[600],
-                  fontWeight: FontWeight.bold,
-                  fontSize: 12,
-                ),
-              ),
-            ],
-          ),
         ],
       ),
     );
   }
-
-/*
-  void _saveAsDraft() async {
-    final box = Hive.box<ProjectHiveModel>('drafts');
-    final updatedProject = currentProject.copyWith(
-      pages: pages,
-      lastModified: DateTime.now(),
-    );
-    final hiveModel = toHiveModel(updatedProject);
-    await box.put(updatedProject.id, hiveModel);
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Draft saved to local storage!')),
-    );
-  }
-*/
-
-
-
-/*  Widget _buildDraggablePanel(Color color, String label, double xx, double yy,
-      double width, double height)
-  {
-    return Draggable<LayoutPanel>(
-      data: LayoutPanel(
-        id: '${label.replaceAll(' ', '_')}_${DateTime.now().microsecondsSinceEpoch}',
-        width: width,
-        height: height,
-        x: xx,
-        y: yy,
-        backgroundColor: Colors.white,
-        customText: label, // Optional: So you can still identify the type
-
-      ),
-      feedback: Container(
-        width: width * 0.3,
-        height: height * 0.3,
-        decoration: BoxDecoration(
-          color: color.withOpacity(0.7),
-          borderRadius: BorderRadius.circular(4),
-          boxShadow: [BoxShadow(color: Colors.black26, blurRadius: 4)],
-        ),
-        child: Center(
-          child: Text(
-            label,
-            style: TextStyle(
-              color: Colors.white,
-              fontSize: 10,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-        ),
-      ),
-      childWhenDragging: Opacity(
-        opacity: 0.3,
-        child: Container(
-          width: 100,
-          height: 60,
-          decoration: BoxDecoration(
-            color: color,
-            borderRadius: BorderRadius.circular(4),
-          ),
-          child: Center(
-            child: Text(
-              label,
-              style: TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 10),
-            ),
-          ),
-        ),
-      ),
-      child: Container(
-        width: 100,
-        height: 60,
-        decoration: BoxDecoration(
-          color: color,
-          borderRadius: BorderRadius.circular(4),
-          boxShadow: [BoxShadow(color: Colors.black26, blurRadius: 2)],
-        ),
-        child: Center(
-          child: Text(
-            label,
-            style: TextStyle(
-                color: Colors.white, fontWeight: FontWeight.bold, fontSize: 10),
-          ),
-        ),
-      ),
-    );
-  }*/
-
-  Widget _buildDraggablePanel(
-      Color color,
-      String label,
-      double xx,
-      double yy,
-      double width,
-      double height,
-      )
-  {
-    return Draggable<LayoutPanel>(
-      data: LayoutPanel(
-        // id: '${label.replaceAll(' ', '_')}_${DateTime.now().microsecondsSinceEpoch}',
-        id: '${label} ${pages[_currentPage].length + 1}',
-        label: label, // Add label to the LayoutPanel
-        width: width,
-        height: height,
-        x: xx,
-        y: yy,
-        backgroundColor: Colors.white,
-        customText: label, // Optional: So you can still identify the type
-      ),
-      feedback: Container(
-        width: width * 0.3,
-        height: height * 0.3,
-        decoration: BoxDecoration(
-          color: color.withOpacity(0.7),
-          borderRadius: BorderRadius.circular(4),
-          boxShadow: [BoxShadow(color: Colors.black26, blurRadius: 4)],
-        ),
-        child: Center(
-          child: Text(
-            label,
-            style: TextStyle(
-              color: Colors.white,
-              fontSize: 10,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-        ),
-      ),
-      childWhenDragging: Opacity(
-        opacity: 0.3,
-        child: Container(
-          width: 100,
-          height: 60,
-          decoration: BoxDecoration(
-            color: color,
-            borderRadius: BorderRadius.circular(4),
-          ),
-          child: Center(
-            child: Text(
-              label,
-              style: TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 10),
-            ),
-          ),
-        ),
-      ),
-      child: Container(
-        width: 100,
-        height: 60,
-        decoration: BoxDecoration(
-          color: color,
-          borderRadius: BorderRadius.circular(4),
-          boxShadow: [BoxShadow(color: Colors.black26, blurRadius: 2)],
-        ),
-        child: Center(
-          child: Text(
-            label,
-            style: TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.bold,
-                fontSize: 10),
-          ),
-        ),
-      ),
-    );
-  }
-
 
   void _showExportOptions() {
     Printing.layoutPdf(
       onLayout: (PdfPageFormat format) async => await _generatePdfFromWidget(),
     );
   }
+
   Future<Uint8List> _generatePdfFromWidget() async {
     try {
-      final boundary = _canvasKey.currentContext?.findRenderObject() as RenderRepaintBoundary?;
+      final boundary = _canvasKey.currentContext?.findRenderObject()
+          as RenderRepaintBoundary?;
       if (boundary == null) throw Exception("Preview widget not found");
 
       final image = await boundary.toImage(pixelRatio: 3.0);
       final byteData = await image.toByteData(format: ImageByteFormat.png);
       final pngBytes = byteData!.buffer.asUint8List();
 
-
       final decoded = await decodeImageFromList(pngBytes);
-      print("🖼️ Image size: ${decoded.width} x ${decoded.height}");
+      print("Image size: ${decoded.width} x ${decoded.height}");
 
       final pdf = pw.Document();
       final imageProvider = pw.MemoryImage(pngBytes);
 
+      final pageSize = PdfPageFormat(
+        _canvasWidth,
+        _canvasHeight,
+        marginAll: 0,
+      );
+
       pdf.addPage(
         pw.Page(
-          pageFormat: PdfPageFormat.a4, // ✅ Set A4 explicitly
+          pageFormat: pageSize, // Use A4 page format
           build: (context) => pw.Center(
             child: pw.Image(
               imageProvider,
-              fit: pw.BoxFit.cover, // or contain/fitHeight
-              width: PdfPageFormat.a4.width,
-              height: PdfPageFormat.a4.height,
+              fit: pw.BoxFit.cover,
             ),
           ),
         ),
@@ -2307,10 +1542,96 @@ class _PanelLayoutEditorScreenState extends State<PanelLayoutEditorScreen> {
     }
   }
 
+  Widget _buildFloatingDrawerWithToggle(
+    double screenHeight,
+    double drawerWidth,
+    double drawerHeight,
+  ) {
+    return AnimatedPositioned(
+      duration: Duration(milliseconds: 300),
+      left: isDrawerOpen ? 0 : -drawerWidth,
+      top: _drawerTopOffset.clamp(0.0, screenHeight - drawerHeight),
+      child: GestureDetector(
+        onPanUpdate: (details) {
+          setState(() {
+            _drawerTopOffset += details.delta.dy;
+            _drawerTopOffset =
+                _drawerTopOffset.clamp(0.0, screenHeight - drawerHeight);
+          });
+        },
+        child: Stack(
+          children: [
+            // 🔷 DRAWER PANEL
+            Material(
+              elevation: 6,
+              borderRadius: BorderRadius.only(
+                topRight: Radius.circular(12),
+                bottomRight: Radius.circular(12),
+              ),
+              child: Container(
+                width: drawerWidth,
+                height: drawerHeight,
+                decoration: BoxDecoration(
+                  color: Colors.blueGrey.shade100,
+                  borderRadius: BorderRadius.only(
+                    topRight: Radius.circular(12),
+                    bottomRight: Radius.circular(12),
+                  ),
+                ),
+                padding: EdgeInsets.all(8),
+                child: SingleChildScrollView(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      Text('Created Panels',
+                          style: TextStyle(fontWeight: FontWeight.bold)),
+                      SizedBox(height: 12),
+                      _buildDraggablePanel(
+                        color: Colors.red,
+                        label: 'Wide',
+                        width: _canvasWidth - 2 * _pageMargin,
+                        height: _canvasHeight * 0.2,
+                      ),
+                      SizedBox(height: 12),
+                      _buildDraggablePanel(
+                        color: Colors.teal,
+                        label: 'Two Half',
+                        width: (_canvasWidth - 2 * _pageMargin) / 2,
+                        height: _canvasHeight * 0.2,
+                      ),
+                      SizedBox(height: 12),
+                      _buildDraggablePanel(
+                        color: Colors.green,
+                        label: 'Tall',
+                        width: _canvasWidth * 0.35,
+                        height: _canvasHeight * 0.5,
+                      ),
+                      SizedBox(height: 12),
+                      _buildDraggablePanel(
+                        color: Colors.orange,
+                        label: 'Square',
+                        width: _canvasWidth * 0.4,
+                        height: _canvasWidth * 0.4,
+                      ),
+                      SizedBox(height: 12),
+                      _buildDraggablePanel(
+                        color: Colors.purple,
+                        label: 'Small',
+                        width: _canvasWidth * 0.25,
+                        height: _canvasHeight * 0.12,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 
-
-
-  /*Future<Uint8List> generatePdf() async {
+/*Future<Uint8List> generatePdf() async {
     final pdf = pw.Document();
 
     pdf.addPage(
@@ -2324,99 +1645,3 @@ class _PanelLayoutEditorScreenState extends State<PanelLayoutEditorScreen> {
     return pdf.save();
   }*/
 }
-
-/*
-Widget _buildExportOption({
-  required IconData icon,
-  required String title,
-  required String subtitle,
-  required Color color,
-  required VoidCallback onTap,
-}) {
-  return Container(
-    margin: EdgeInsets.only(bottom: 12),
-    child: Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(12),
-        child: Container(
-          padding: EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            border: Border.all(color: Colors.grey.shade300),
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: Row(
-            children: [
-              Container(
-                padding: EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: color.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Icon(icon, color: color, size: 24),
-              ),
-              SizedBox(width: 16),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      title,
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    SizedBox(height: 4),
-                    Text(
-                      subtitle,
-                      style: TextStyle(
-                        color: Colors.grey[600],
-                        fontSize: 14,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              Icon(Icons.arrow_forward_ios, color: Colors.grey, size: 16),
-            ],
-          ),
-        ),
-      ),
-    ),
-  );
-}
-
-Future<void> _exportCurrentPage() async {
-  await FileExportService.exportCurrentPageAsPNG(
-    context: context,
-    canvasKey: _canvasKey,
-    projectName: currentProject.name,
-    pageNumber: _currentPage + 1,
-  );
-}
-
-Future<void> _exportAllPages() async {
-  await FileExportService.exportAllPagesAsPNG(
-    context: context,
-    pages: pages,
-    projectName: currentProject.name,
-  );
-}
-
-Future<void> _exportAsPDF() async {
-  await FileExportService.exportAsPDF(
-    context: context,
-    pages: pages,
-    projectName: currentProject.name,
-  );
-}
-
-Future<void> _exportProject() async {
-  await FileExportService.exportProjectData(
-    context: context,
-    project: currentProject.copyWith(pages: pages),
-  );
-}
-*/

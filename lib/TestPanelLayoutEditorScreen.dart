@@ -6,37 +6,11 @@ import 'package:flutter/rendering.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
+import 'PreviewPdf/PDFPageFormat.dart';
 import 'Resizeable/GridPainter.dart';
 import 'PreviewPdf/PageMarginsPainter.dart';
 import 'PanelModel/Project.dart';
-import 'PreviewPdf/AllPagesPreviewScreen.dart';
-import 'PreviewPdf/file_export_service.dart';
-import 'package:pdf/pdf.dart';
-import 'package:pdf/widgets.dart' as pw;
 import 'dart:typed_data';
-
-// PDF Page Format Constants
-class PDFPageFormat {
-  static const double A4_WIDTH = 595.0; // A4 width in points
-  static const double A4_HEIGHT = 842.0; // A4 height in points
-  static const double LETTER_WIDTH = 612.0; // Letter width in points
-  static const double LETTER_HEIGHT = 792.0; // Letter height in points
-  static const double LEGAL_WIDTH = 612.0; // Legal width in points
-  static const double LEGAL_HEIGHT = 1008.0; // Legal height in points
-
-  // Display scaling factor to fit screen
-  static const double DISPLAY_SCALE = 0.6;
-
-  static Map<String, Size> get formats => {
-        'A4': Size(A4_WIDTH * DISPLAY_SCALE, A4_HEIGHT * DISPLAY_SCALE),
-      };
-
-  static double get aspectRatioA4 => A4_WIDTH / A4_HEIGHT;
-
-  static double get aspectRatioLetter => LETTER_WIDTH / LETTER_HEIGHT;
-
-  static double get aspectRatioLegal => LEGAL_WIDTH / LEGAL_HEIGHT;
-}
 
 class TestPanelLayoutEditorScreen extends StatefulWidget {
   final Project project;
@@ -55,13 +29,13 @@ class _TestPanelLayoutEditorScreenState extends State<TestPanelLayoutEditorScree
   int _currentPage = 0;
   LayoutPanel? selectedPanel;
   final GlobalKey _canvasKey = GlobalKey();
-  bool _showGrid = false;
-  bool _snapToGrid = false;
+  final bool _showGrid = false;
+  final bool _snapToGrid = false;
 
   // PDF Page Settings
-  String _selectedPageFormat = 'A4';
-  bool _showPageMargins = false;
-  double _pageMargin = 10.0;
+  final String _selectedPageFormat = 'A4';
+  final bool _showPageMargins = false;
+  final double _pageMargin = 10.0;
 
   late List<GlobalKey> _pageKeys;
 
@@ -72,10 +46,7 @@ class _TestPanelLayoutEditorScreenState extends State<TestPanelLayoutEditorScree
     pages = List.from(widget.project.pages);
     debugPages();
   }
-
-  // Get current page dimensions based on selected format
   Size get _currentPageSize => PDFPageFormat.formats[_selectedPageFormat]!;
-
   double get _canvasWidth => _currentPageSize.width;
   double get _canvasHeight => _currentPageSize.height;
 
@@ -96,7 +67,6 @@ class _TestPanelLayoutEditorScreenState extends State<TestPanelLayoutEditorScree
                   child: Center(
                     child: Container(
                       child: RepaintBoundary(
-                        // ✅ Added
                         key: _canvasKey,
                         child: Container(
                           width: _canvasWidth,
@@ -416,7 +386,7 @@ class _TestPanelLayoutEditorScreenState extends State<TestPanelLayoutEditorScree
       color: Colors.grey.shade200,
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       child: Row(
-        mainAxisAlignment: MainAxisAlignment.center, // 👈 Centers the Row content
+        mainAxisAlignment: MainAxisAlignment.center,
         children: [
           const Text("Pages:", style: TextStyle(fontWeight: FontWeight.bold)),
           const SizedBox(width: 12),
@@ -460,7 +430,7 @@ class _TestPanelLayoutEditorScreenState extends State<TestPanelLayoutEditorScree
     final pdf = pw.Document();
 
     for (int i = 0; i < pages.length; i++) {
-      final renderedWidget = _buildPageWidget(pages[i]); // 👈 Render each page
+      final renderedWidget = _buildPageWidget(pages[i]);
 
       final imageBytes = await _renderWidgetToImage(renderedWidget);
       final imageProvider = pw.MemoryImage(imageBytes);
