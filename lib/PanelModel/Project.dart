@@ -44,6 +44,7 @@ class Project {
 
 class LayoutPanel {
   final String id;
+  final String? label;
   final double width;
   final double height;
   double x;
@@ -55,6 +56,7 @@ class LayoutPanel {
 
   LayoutPanel({
     required this.id,
+    this.label= null,
     required this.width,
     required this.height,
     this.x = 0,
@@ -67,6 +69,7 @@ class LayoutPanel {
 
   LayoutPanel copyWith({
     String? id,
+    String? label,
     double? width,
     double? height,
     double? x,
@@ -78,6 +81,7 @@ class LayoutPanel {
   }) {
     return LayoutPanel(
       id: id ?? this.id,
+      label: label ?? this.label,
       width: width ?? this.width,
       height: height ?? this.height,
       x: x ?? this.x,
