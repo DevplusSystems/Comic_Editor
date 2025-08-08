@@ -1671,6 +1671,7 @@ class _PanelLayoutEditorScreenState extends State<PanelLayoutEditorScreen> {
               });
             },
           ),
+
           SizedBox(width: 8),
           _buildAppBarButton(
             icon: Icons.dashboard_customize,
