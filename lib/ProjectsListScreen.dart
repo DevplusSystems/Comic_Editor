@@ -12,6 +12,7 @@ import 'PanelLayoutEditorScreen.dart';
 import 'PanelModel/Project.dart';
 import 'package:hive/hive.dart';
 
+import 'TestPanelLayoutEditorScreen.dart';
 
 // final UI
 class ProjectsListScreen extends StatefulWidget {
@@ -27,6 +28,7 @@ class _ProjectsListScreenState extends State<ProjectsListScreen> {
     super.initState();
     _loadProjects();
   }
+
   void _loadProjects() {
     final box = Hive.box<ProjectHiveModel>('drafts');
 
@@ -111,6 +113,34 @@ class _ProjectsListScreenState extends State<ProjectsListScreen> {
     }
   }
 
+  void _ViewProject(Project project) async {
+    final result = await Navigator.push<Project>(
+      context,
+      MaterialPageRoute(
+        builder: (context) => TestPanelLayoutEditorScreen(project: project),
+      ),
+
+      /*    MaterialPageRoute(
+        builder: (context) => PanelLayoutEditorScreen(project: project),
+      ),*/
+    ).then((_) {
+      // Reload drafts from Hive when coming back
+      _loadProjects();
+    });
+
+    if (result != null) {
+      setState(() {
+        final index = savedProjects.indexWhere((p) => p.id == result.id);
+        if (index != -1) {
+          savedProjects[index] = result.copyWith(lastModified: DateTime.now());
+
+          // Update in Hive too
+          final box = Hive.box<ProjectHiveModel>('drafts');
+          box.put(result.id, toHiveModel(result));
+        }
+      });
+    }
+  }
 
   void _deleteProject(Project project) async {
     final confirm = await showDialog<bool>(
@@ -159,6 +189,7 @@ class _ProjectsListScreenState extends State<ProjectsListScreen> {
       box.put(duplicatedProject.id, toHiveModel(duplicatedProject));
     });
   }
+
   Future<void> _exportProject(Project project) async {
     final selectedFormat = await showDialog<String>(
       context: context,
@@ -224,11 +255,13 @@ class _ProjectsListScreenState extends State<ProjectsListScreen> {
         SnackBar(content: Text('Exported as $selectedFormat!')),
       );
 
-      Share.shareFiles([filePath], text: 'My comic project in $selectedFormat format!');
+      Share.shareFiles([filePath],
+          text: 'My comic project in $selectedFormat format!');
     } catch (e) {
       Navigator.pop(context);
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Export failed: $e'), backgroundColor: Colors.red),
+        SnackBar(
+            content: Text('Export failed: $e'), backgroundColor: Colors.red),
       );
     }
   }
@@ -239,19 +272,22 @@ class _ProjectsListScreenState extends State<ProjectsListScreen> {
       'name': project.name,
       'createdAt': project.createdAt.toIso8601String(),
       'lastModified': project.lastModified.toIso8601String(),
-      'pages': project.pages.map((page) =>
-          page.map((panel) => {
-            'id': panel.id,
-            'x': panel.x,
-            'y': panel.y,
-            'width': panel.width,
-            'height': panel.height,
-            'customText': panel.customText,
-            'backgroundColor': panel.backgroundColor.value,
-          }).toList()
-      ).toList(),
+      'pages': project.pages
+          .map((page) => page
+              .map((panel) => {
+                    'id': panel.id,
+                    'x': panel.x,
+                    'y': panel.y,
+                    'width': panel.width,
+                    'height': panel.height,
+                    'customText': panel.customText,
+                    'backgroundColor': panel.backgroundColor.value,
+                  })
+              .toList())
+          .toList(),
     });
   }
+
   Future<File> generatePdf(Project project) async {
     final pdf = pw.Document();
     pdf.addPage(
@@ -269,25 +305,33 @@ class _ProjectsListScreenState extends State<ProjectsListScreen> {
     return file;
   }
 
-
-
-
-
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.grey.shade50,
+/*
       appBar: AppBar(
-        title: Text(
-          'My Projects',
-          style: TextStyle(fontWeight: FontWeight.bold),
-        ),
-        backgroundColor: Colors.white,
-        foregroundColor: Colors.black,
+        backgroundColor: Colors.grey.shade50,
+        centerTitle: true,
+        // 👈 centers the title
         elevation: 1,
+        title: Text(
+          'Comic Creator',
+          style: TextStyle(
+            fontWeight: FontWeight.bold,
+            fontSize: 18,
+          ),
+        ),
         actions: [
-          IconButton(
+          Padding(
+            padding: const EdgeInsets.only(right: 16.0),
+            child: CircleAvatar(
+              backgroundImage: AssetImage('assets/images/profile_icon.jpg'),
+              // <-- your image path
+              radius: 14,
+              backgroundColor: Colors.transparent,
+            ),
+            */
+/* IconButton(
             icon: Icon(Icons.search),
             onPressed: () {
               // Search functionality
@@ -298,19 +342,46 @@ class _ProjectsListScreenState extends State<ProjectsListScreen> {
             onPressed: () {
               // Sort functionality
             },
+          ),*//*
+
           ),
         ],
+      ),
+*/
+
+      appBar: AppBar(
+        backgroundColor: Colors.white,
+        foregroundColor: Colors.black,
+        elevation: 1,
+        centerTitle: true,
+        // 👇 Profile image on the far left
+        leading: Padding(
+          padding: const EdgeInsets.all(8.0),
+          /*child: CircleAvatar(
+            backgroundImage: AssetImage('assets/images/profile_icon.jpg'),
+            backgroundColor: Colors.transparent,
+          ),*/
+        ),
+
+        // 👇 Centered title only
+        title: Text(
+          'Comic Creator',
+          style: TextStyle(
+            fontWeight: FontWeight.bold,
+            fontSize: 18,
+          ),
+        ),
       ),
       body: savedProjects.isEmpty
           ? _buildEmptyState()
           : ListView.builder(
-        padding: EdgeInsets.all(16),
-        itemCount: savedProjects.length,
-        itemBuilder: (context, index) {
-          final project = savedProjects[index];
-          return _buildProjectCard(project);
-        },
-      ),
+              padding: EdgeInsets.all(16),
+              itemCount: savedProjects.length,
+              itemBuilder: (context, index) {
+                final project = savedProjects[index];
+                return _buildProjectCard(project);
+              },
+            ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: _createNewProject,
         icon: Icon(Icons.add),
@@ -348,7 +419,7 @@ class _ProjectsListScreenState extends State<ProjectsListScreen> {
               fontSize: 16,
             ),
           ),
-         /* SizedBox(height: 24),
+          /* SizedBox(height: 24),
           ElevatedButton.icon(
             onPressed: _createNewProject,
             icon: Icon(Icons.add),
@@ -370,7 +441,7 @@ class _ProjectsListScreenState extends State<ProjectsListScreen> {
       elevation: 2,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: InkWell(
-        onTap: () => _editProject(project),
+        onTap: () => _ViewProject(project),
         borderRadius: BorderRadius.circular(12),
         child: Padding(
           padding: EdgeInsets.all(16),
@@ -386,17 +457,17 @@ class _ProjectsListScreenState extends State<ProjectsListScreen> {
                 ),
                 child: project.thumbnail != null
                     ? ClipRRect(
-                  borderRadius: BorderRadius.circular(8),
-                  child: Image.memory(
-                    project.thumbnail!,
-                    fit: BoxFit.cover,
-                  ),
-                )
+                        borderRadius: BorderRadius.circular(8),
+                        child: Image.memory(
+                          project.thumbnail!,
+                          fit: BoxFit.cover,
+                        ),
+                      )
                     : Icon(
-                  Icons.image_outlined,
-                  color: Colors.grey[400],
-                  size: 30,
-                ),
+                        Icons.image_outlined,
+                        color: Colors.grey[400],
+                        size: 30,
+                      ),
               ),
               SizedBox(width: 16),
 
@@ -432,26 +503,34 @@ class _ProjectsListScreenState extends State<ProjectsListScreen> {
                 ),
               ),
 
+              IconButton(
+                icon: Icon(Icons.edit, color: Colors.grey[700]),
+                onPressed: () {
+/*
+                  _editProject(project);
+*/
+                },
+              ),
               // Actions menu
               PopupMenuButton<String>(
                 onSelected: (value) {
                   switch (value) {
-                    case 'edit':
+                    /*case 'edit':
                       _editProject(project);
-                      break;
-                    case 'duplicate':
+                      break;*/
+                    /*  case 'duplicate':
                       _duplicateProject(project);
-                      break;
-                    case 'export':
+                      break;*/
+                    /* case 'export':
                       _exportProject(project);
-                      break;
+                      break;*/
                     case 'delete':
                       _deleteProject(project);
                       break;
                   }
                 },
                 itemBuilder: (context) => [
-                  PopupMenuItem(
+                 /* PopupMenuItem(
                     value: 'edit',
                     child: Row(
                       children: [
@@ -460,8 +539,8 @@ class _ProjectsListScreenState extends State<ProjectsListScreen> {
                         Text('Edit'),
                       ],
                     ),
-                  ),
-                  PopupMenuItem(
+                  ),*/
+                 /* PopupMenuItem(
                     value: 'duplicate',
                     child: Row(
                       children: [
@@ -470,8 +549,8 @@ class _ProjectsListScreenState extends State<ProjectsListScreen> {
                         Text('Duplicate'),
                       ],
                     ),
-                  ),
-                  PopupMenuItem(
+                  ),*/
+                /*  PopupMenuItem(
                     value: 'export',
                     child: Row(
                       children: [
@@ -480,7 +559,7 @@ class _ProjectsListScreenState extends State<ProjectsListScreen> {
                         Text('Export'),
                       ],
                     ),
-                  ),
+                  ),*/
                   PopupMenuDivider(),
                   PopupMenuItem(
                     value: 'delete',
@@ -516,9 +595,6 @@ class _ProjectsListScreenState extends State<ProjectsListScreen> {
     }
   }
 }
-
-
-
 
 // UI without Hive integration
 /*class ProjectsListScreen extends StatefulWidget {
@@ -944,9 +1020,6 @@ class _ProjectsListScreenState extends State<ProjectsListScreen> {
     }
   }
 }*/
-
-
-
 
 /* UI with database */
 /*

@@ -5,6 +5,7 @@ import 'package:comic_editor/project_hive_model.dart';
 import 'package:comic_editor/project_mapper.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
+import 'package:fluttertoast/fluttertoast.dart';
 import 'package:hive/hive.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:pdf/pdf.dart';
@@ -73,9 +74,10 @@ class _PanelLayoutEditorScreenState extends State<PanelLayoutEditorScreen> {
   // PDF Page Settings
   String _selectedPageFormat = 'A4';
   bool _showPageMargins = true;
-  double _pageMargin = 20.0;
+  double _pageMargin = 10.0;
 
-  final GlobalKey _panelPreviewKey = GlobalKey();
+  late List<GlobalKey> _pageKeys;
+
 
 /*  @override
   void initState() {
@@ -250,7 +252,7 @@ class _PanelLayoutEditorScreenState extends State<PanelLayoutEditorScreen> {
     currentProject = updatedProject;
 
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Draft saved to local storage!')),
+      const SnackBar(content: Text('Saved the project for later!')),
     );
   }
 
@@ -288,7 +290,7 @@ class _PanelLayoutEditorScreenState extends State<PanelLayoutEditorScreen> {
       });
     }
   }
-
+/*
   void _addSinglePanel() {
     final newPanel = LayoutPanel(
       id: "Panel ${pages[_currentPage].length + 1}",
@@ -308,8 +310,87 @@ class _PanelLayoutEditorScreenState extends State<PanelLayoutEditorScreen> {
     setState(() {
       pages[_currentPage].add(newPanel);
     });
+  }*/
+/*
+  void _addSinglePanel() {
+    final panelWidth = (_canvasWidth - (_pageMargin * 2)) / 2; // Two panels per row
+    final panelHeight = _canvasHeight * 0.25;
+
+    final newPanel = LayoutPanel(
+      id: "Panel ${pages[_currentPage].length + 1}",
+      width: panelWidth,
+      height: panelHeight,
+      x: _pageMargin,
+      y: _pageMargin,
+      backgroundColor: Colors.white,
+    );
+
+    Offset? freePosition = _findFreePosition(newPanel);
+    if (freePosition != null) {
+      newPanel.x = freePosition.dx;
+      newPanel.y = freePosition.dy;
+    }
+
+    setState(() {
+      pages[_currentPage].add(newPanel);
+    });
+  }
+*/
+
+  void _addSinglePanel() {
+    final panelWidth = (_canvasWidth - (_pageMargin * 2)) / 2; // Two panels per row
+    final panelHeight = _canvasHeight * 0.25;
+
+    final newPanel = LayoutPanel(
+      // id: "Panel_${DateTime.now().microsecondsSinceEpoch}", // Unique ID always
+      id: "Panel ${pages[_currentPage].length + 1}", // 👈 Human-readable ID
+      width: panelWidth,
+      height: panelHeight,
+      x: _pageMargin,
+      y: _pageMargin,
+      backgroundColor: Colors.white,
+    );
+
+    Offset? freePosition = _findFreePosition(newPanel);
+
+    if (freePosition == null) {
+      // No space available
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text("No more space on this page. Add a new page."),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+
+    newPanel.x = freePosition.dx;
+    newPanel.y = freePosition.dy;
+
+    setState(() {
+      pages[_currentPage].add(newPanel);
+    });
   }
 
+
+  bool get _canAddMorePanels {
+    final panelWidth = (_canvasWidth - (_pageMargin * 2)) / 2;
+    final panelHeight = _canvasHeight * 0.25;
+    final testPanel = LayoutPanel(
+      id: 'test',
+      width: panelWidth,
+      height: panelHeight,
+      x: 0,
+      y: 0,
+      backgroundColor: Colors.white,
+    );
+    return _findFreePosition(testPanel) != null;
+  }
+
+
+
+
+/*
   Offset? _findFreePosition(LayoutPanel panel) {
     final maxX = _canvasWidth - panel.width - _pageMargin;
     final maxY = _canvasHeight - panel.height - _pageMargin;
@@ -324,6 +405,49 @@ class _PanelLayoutEditorScreenState extends State<PanelLayoutEditorScreen> {
     }
     return null;
   }
+*/
+  /*Offset? _findFreePosition(LayoutPanel panel) {
+    final maxX = _canvasWidth - panel.width - _pageMargin;
+    final maxY = _canvasHeight - panel.height - _pageMargin;
+
+    // Use panel dimensions for precise grid layout without extra gaps
+    for (double y = _pageMargin; y <= maxY; y += panel.height) {
+      for (double x = _pageMargin; x <= maxX; x += panel.width) {
+        final testPanel = panel.copyWith(x: x, y: y);
+        if (!_isOverlapping(testPanel)) {
+          return Offset(x, y);
+        }
+      }
+    }
+    return null;
+  }*/
+  Offset? _findFreePosition(LayoutPanel panel) {
+    const double rowSpacing = 20.0; // space between rows
+    const int panelsPerRow = 2;
+
+    final double horizontalSpacing = 0;
+    final double panelWidth = panel.width;
+    final double panelHeight = panel.height;
+
+    final double maxX = _canvasWidth - _pageMargin - panelWidth;
+    final double maxY = _canvasHeight - _pageMargin - panelHeight;
+
+    for (double y = _pageMargin; y <= maxY; y += panelHeight + rowSpacing) {
+      for (int i = 0; i < panelsPerRow; i++) {
+        double x = _pageMargin + i * (panelWidth + horizontalSpacing);
+        if (x > maxX) break;
+
+        final testPanel = panel.copyWith(x: x, y: y);
+        if (!_isOverlapping(testPanel)) {
+          return Offset(x, y);
+        }
+      }
+    }
+
+    return null;
+  }
+
+
 
   void _switchPage(int index) {
     setState(() {
@@ -549,14 +673,18 @@ class _PanelLayoutEditorScreenState extends State<PanelLayoutEditorScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       const Text(
-                        'PDF Layout Templates',
+                        // 'PDF Layout Templates',
+
+                        /*   'PDF Layout Templates',*/
+                        'Layout Templates',
                         style: TextStyle(
                           fontSize: 20,
                           fontWeight: FontWeight.bold,
                         ),
                       ),
                       Text(
-                        'Optimized for $_selectedPageFormat format',
+                        // remove the text showing the  page format',
+                        'Optimized for format',
                         style: TextStyle(
                           color: Colors.grey[600],
                           fontSize: 14,
@@ -571,6 +699,7 @@ class _PanelLayoutEditorScreenState extends State<PanelLayoutEditorScreen> {
                 ],
               ),
               const SizedBox(height: 16),
+/*
               Expanded(
                 child: GridView.count(
                   crossAxisCount: 2,
@@ -641,6 +770,86 @@ class _PanelLayoutEditorScreenState extends State<PanelLayoutEditorScreen> {
                   ],
                 ),
               ),
+*/
+
+              Expanded(
+                child: GridView.count(
+                  crossAxisCount: 2,
+                  crossAxisSpacing: 16,
+                  mainAxisSpacing: 16,
+                  children: [
+                    _buildLayoutTemplate(
+                      'Single Column',
+                      'Full-width layout',
+                      Icons.view_agenda,
+                      Colors.blue,
+                      _applySingleColumnLayout,
+                    ),
+                    _buildLayoutTemplate(
+                      'Two Columns',
+                      'Side-by-side panels',
+                      Icons.view_column,
+                      Colors.green,
+                      _applyTwoColumnLayout,
+                    ),
+                    _buildLayoutTemplate(
+                      'Three Columns',
+                      'Triple column layout',
+                      Icons.view_week,
+                      Colors.orange,
+                      _applyThreeColumnLayout,
+                    ),
+                    _buildLayoutTemplate(
+                      'Two Rows',
+                      'Top and bottom panels',
+                      Icons.view_day,
+                      Colors.brown,
+                      _applyTwoRowLayout,
+                    ),
+                    _buildLayoutTemplate(
+                      'Grid 2x2',
+                      'Four equal panels',
+                      Icons.grid_4x4,
+                      Colors.purple,
+                      _applyGrid2x2Layout,
+                    ),
+                    _buildLayoutTemplate(
+                      'Header + Content',
+                      'Title with body panels',
+                      Icons.article,
+                      Colors.red,
+                      _applyHeaderContentLayout,
+                    ),
+                    _buildLayoutTemplate(
+                      'Magazine Style',
+                      'Mixed panel sizes',
+                      Icons.auto_stories,
+                      Colors.teal,
+                      _applyMagazineLayout,
+                    ),
+                    _buildLayoutTemplate(
+                      'Comic Strip',
+                      'Horizontal sequence',
+                      Icons.movie_filter,
+                      Colors.indigo,
+                      _applyComicStripLayout,
+                    ),
+                    _buildLayoutTemplate(
+                      'Clear All',
+                      'Remove all panels',
+                      Icons.clear_all,
+                      Colors.grey,
+                          () {
+                        setState(() {
+                          pages[_currentPage].clear();
+                          selectedPanel = null;
+                        });
+                      },
+                    ),
+                  ],
+                ),
+              ),
+
             ],
           ),
         );
@@ -903,11 +1112,38 @@ class _PanelLayoutEditorScreenState extends State<PanelLayoutEditorScreen> {
       selectedPanel = null;
     });
   }
+  void _applyTwoRowLayout() {
+    final contentWidth = _canvasWidth - (3 * _pageMargin);
+    final topPanelHeight = _canvasHeight * 0.4;
+    final bottomPanelHeight = _canvasHeight - topPanelHeight - (3 * _pageMargin);
+
+    setState(() {
+      pages[_currentPage] = [
+        LayoutPanel(
+          id: "Top Panel",
+          x: _pageMargin,
+          y: _pageMargin,
+          width: contentWidth,
+          height: topPanelHeight,
+          backgroundColor: Colors.white,
+        ),
+        LayoutPanel(
+          id: "Bottom Panel",
+          x: _pageMargin,
+          y: topPanelHeight + (2 * _pageMargin),
+          width: contentWidth,
+          height: bottomPanelHeight,
+          backgroundColor: Colors.white,
+        ),
+      ];
+      selectedPanel = null;
+    });
+  }
 
   void _applyMagazineLayout() {
     final contentWidth = _canvasWidth - (3 * _pageMargin);
     final leftPanelWidth = contentWidth * 0.6;
-    final rightPanelWidth = contentWidth * 0.35;
+    final rightPanelWidth = contentWidth * 0.4;
     final topRightHeight = _canvasHeight * 0.3;
     final bottomRightHeight =
         _canvasHeight - topRightHeight - (3 * _pageMargin);
@@ -924,7 +1160,7 @@ class _PanelLayoutEditorScreenState extends State<PanelLayoutEditorScreen> {
         ),
         LayoutPanel(
           id: "Sidebar Top",
-          x: leftPanelWidth + (2 * _pageMargin),
+          x: _pageMargin + leftPanelWidth + _pageMargin, // ✅ corrected here
           y: _pageMargin,
           width: rightPanelWidth,
           height: topRightHeight,
@@ -932,8 +1168,8 @@ class _PanelLayoutEditorScreenState extends State<PanelLayoutEditorScreen> {
         ),
         LayoutPanel(
           id: "Sidebar Bottom",
-          x: leftPanelWidth + (2 * _pageMargin),
-          y: topRightHeight + (2 * _pageMargin),
+          x: _pageMargin + leftPanelWidth + _pageMargin, // ✅ same fix
+          y: _pageMargin + topRightHeight + _pageMargin,
           width: rightPanelWidth,
           height: bottomRightHeight,
           backgroundColor: Colors.white,
@@ -978,6 +1214,8 @@ class _PanelLayoutEditorScreenState extends State<PanelLayoutEditorScreen> {
   }
 
   Widget _buildLivePanelContent(LayoutPanel panel) {
+
+    print("Panel: ${panel.label} ID: ${panel.id}");
     return Container(
       color: panel.backgroundColor,
       child: Stack(
@@ -987,28 +1225,28 @@ class _PanelLayoutEditorScreenState extends State<PanelLayoutEditorScreen> {
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(
+                 /* Icon(
                     Icons.add_photo_alternate_outlined,
-                    size: 40,
+                    size: 30,
                     color: Colors.grey[400],
-                  ),
+                  ),*/
                   const SizedBox(height: 8),
                   Text(
-                    panel.id,
+                    panel.id ?? 'Empty Panel',
                     style: TextStyle(
                       color: Colors.grey[600],
                       fontWeight: FontWeight.bold,
-                      fontSize: 16,
+                      fontSize: 14,
                     ),
                   ),
-                  const SizedBox(height: 4),
+                 /* const SizedBox(height: 4),
                   Text(
                     'Tap to select',
                     style: TextStyle(
                       color: Colors.grey[500],
                       fontSize: 12,
                     ),
-                  ),
+                  ),*/
                 ],
               ),
             ),
@@ -1080,16 +1318,7 @@ class _PanelLayoutEditorScreenState extends State<PanelLayoutEditorScreen> {
                           margin: const EdgeInsets.symmetric(vertical: 14),
                           padding: const EdgeInsets.all(2),
                           decoration: BoxDecoration(
-                            color: Colors.white,
-                            border: Border.all(color: Colors.black, width: 2),
-                            borderRadius: BorderRadius.circular(4),
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.black.withOpacity(0.2),
-                                blurRadius: 8,
-                                offset: Offset(0, 4),
-                              ),
-                            ],
+                            color: Colors.grey[200],
                           ),
                           child: DragTarget<LayoutPanel>(
                             onAcceptWithDetails: (details) {
@@ -1140,7 +1369,13 @@ class _PanelLayoutEditorScreenState extends State<PanelLayoutEditorScreen> {
                                           ),
                                           const SizedBox(height: 16),
                                           Text(
+
+                                            // remove the text showing the  page format
+
+/*
                                             'Empty $_selectedPageFormat Page',
+*/
+                                            'Empty Page',
                                             style: TextStyle(
                                               fontSize: 20,
                                               color: Colors.grey[600],
@@ -1155,13 +1390,13 @@ class _PanelLayoutEditorScreenState extends State<PanelLayoutEditorScreen> {
                                             ),
                                           ),
                                           const SizedBox(height: 8),
-                                          Text(
+                                          /*Text(
                                             '${_canvasWidth.toInt()} × ${_canvasHeight.toInt()} pts',
                                             style: TextStyle(
                                               color: Colors.grey[400],
                                               fontSize: 12,
                                             ),
-                                          ),
+                                          ),*/
                                         ],
                                       ),
                                     ),
@@ -1373,32 +1608,58 @@ class _PanelLayoutEditorScreenState extends State<PanelLayoutEditorScreen> {
                   ),
                   overflow: TextOverflow.ellipsis,
                 ),
-                Text(
+
+                // remove the text showing the  page format
+
+                /*  Text(
                   '$_selectedPageFormat Format',
                   style: TextStyle(
                     fontSize: 12,
                     color: Colors.grey[600],
                   ),
-                ),
+                ),*/
               ],
             ),
           ),
-          _buildAppBarButton(
+          /*_buildAppBarButton(
             icon: Icons.settings,
             label: 'Page Format',
             onPressed: _showPageFormatOptions,
-          ),
+          ),*/
           SizedBox(width: 8),
           _buildAppBarButton(
             icon: Icons.download,
             label: 'Export',
+/*
             onPressed: _showExportOptions,
+*/
+            onPressed: () {
+
+              Fluttertoast.showToast(
+                msg: "Exporting by page is not supported yet.",
+                toastLength: Toast.LENGTH_SHORT,
+                gravity: ToastGravity.BOTTOM,
+                backgroundColor: Colors.grey[800],
+                textColor: Colors.white,
+                fontSize: 14.0,
+              );
+            },
           ),
           SizedBox(width: 8),
           _buildAppBarButton(
             icon: Icons.remove_red_eye,
             label: 'Preview',
             onPressed: _showAllPagesPreview,
+          ),
+          SizedBox(width: 8),
+          _buildAppBarButton(
+            icon: _showPageMargins ? Icons.pages_outlined : Icons.pages,
+            label: _showPageMargins ? 'Hide Margin' : 'Show Margin',
+            onPressed: () {
+              setState(() {
+                _showPageMargins = !_showPageMargins;
+              });
+            },
           ),
           SizedBox(width: 8),
           _buildAppBarButton(
@@ -1452,7 +1713,7 @@ class _PanelLayoutEditorScreenState extends State<PanelLayoutEditorScreen> {
     );
   }
 
-  Widget _buildDrawer(
+ /* Widget _buildDrawer(
       double screenWidth,
       double screenHeight,
       double padding,
@@ -1472,7 +1733,7 @@ class _PanelLayoutEditorScreenState extends State<PanelLayoutEditorScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            Text('PDF Panels', style: TextStyle(fontWeight: FontWeight.bold)),
+            Text('Created Panels', style: TextStyle(fontWeight: FontWeight.bold)),
             SizedBox(height: 10),
             _buildDraggablePanel(Colors.red, 'Header', 0, 0, _canvasWidth * 0.3,
                 _canvasHeight * 0.15),
@@ -1492,7 +1753,106 @@ class _PanelLayoutEditorScreenState extends State<PanelLayoutEditorScreen> {
         ),
       ),
     );
+  }*/
+
+  Widget _buildDrawer(
+      double screenWidth,
+      double screenHeight,
+      double padding,
+      double panelWidthLeft,
+      double panelWidthRight,
+      double panelHeightTall,
+      double panelHeightSmall,
+      ) {
+    return AnimatedPositioned(
+      duration: Duration(milliseconds: 300),
+      left: isDrawerOpen ? 0 : -150,
+      top: 0,
+      bottom: 0,
+      child: Container(
+        width: 150,
+        color: Colors.blueGrey.shade100,
+        padding: EdgeInsets.only(top: 60, left: 8, right: 8),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            Text('Created Panels', style: TextStyle(fontWeight: FontWeight.bold)),
+            SizedBox(height: 12),
+
+            // Rounded rectangle (wide)
+            _buildDraggablePanel
+              (
+              Colors.red,
+              'Wide',
+              0,
+              0,
+              _canvasWidth - 2 * _pageMargin, // ✅ full width respecting margins
+              _canvasHeight * 0.2,
+            ),
+            SizedBox(height: 12),
+
+            _buildDraggablePanel(
+              Colors.teal,
+              'Two Half', // draggable label
+              0,
+              0,
+              (_canvasWidth - 2 * _pageMargin) / 2, // ✅ visually half-width in drawer
+              _canvasHeight * 0.2,
+            ),
+
+            SizedBox(height: 12),
+
+            // Vertical rectangle (tall)
+            _buildDraggablePanel(
+              Colors.green,
+              'Tall',
+              0,
+              0,
+              _canvasWidth * 0.35,
+              _canvasHeight * 0.5,
+            ),
+
+            SizedBox(height: 12),
+
+            // Medium square panel
+            _buildDraggablePanel(
+              Colors.orange,
+              'Square',
+              0,
+              0,
+              _canvasWidth * 0.4,
+              _canvasWidth * 0.4,
+            ),
+
+            SizedBox(height: 12),
+
+            // Short wide panel (like footer)
+            _buildDraggablePanel(
+              Colors.blue,
+              'Short',
+              0,
+              0,
+              _canvasWidth * 0.7,
+              _canvasHeight * 0.12,
+            ),
+
+            SizedBox(height: 12),
+
+            // Small bubble panel
+            _buildDraggablePanel(
+              Colors.purple,
+              'Small ',
+              0,
+              0,
+              _canvasWidth * 0.25,
+              _canvasHeight * 0.12,
+            ),
+          ],
+        ),
+      ),
+    );
   }
+
 
   Widget _buildDrawerToggle() {
     return Positioned(
@@ -1544,16 +1904,19 @@ class _PanelLayoutEditorScreenState extends State<PanelLayoutEditorScreen> {
                 : null,
           ),
           const Spacer(),
-          Text(
+
+          // remove the text showing the  page format
+          /*Text(
             '$_selectedPageFormat',
             style: TextStyle(
               fontSize: 12,
               color: Colors.grey[600],
               fontWeight: FontWeight.bold,
             ),
-          ),
-          const SizedBox(width: 16),
-          Row(
+          ),*/
+
+
+         /* Row(
             children: [
               Checkbox(
                 value: _snapToGrid,
@@ -1565,7 +1928,7 @@ class _PanelLayoutEditorScreenState extends State<PanelLayoutEditorScreen> {
               ),
               Text('Snap to Grid', style: TextStyle(fontSize: 12)),
             ],
-          ),
+          ),*/
         ],
       ),
     );
@@ -1582,7 +1945,7 @@ class _PanelLayoutEditorScreenState extends State<PanelLayoutEditorScreen> {
             scrollDirection: Axis.horizontal,
             child: Row(
               children: [
-                ElevatedButton.icon(
+               /* ElevatedButton.icon(
                   onPressed: _addSinglePanel,
                   icon: Icon(Icons.add, size: 18),
                   label: Text("Add Panel"),
@@ -1592,26 +1955,14 @@ class _PanelLayoutEditorScreenState extends State<PanelLayoutEditorScreen> {
                     padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                   ),
                 ),
-                SizedBox(width: 8),
+*/
                 ElevatedButton.icon(
-                  onPressed: _showLayoutTemplates,
-                  icon: Icon(Icons.dashboard_customize, size: 18),
-                  label: Text("PDF Templates"),
+                  onPressed: _canAddMorePanels ? _addSinglePanel : null,
+                  icon: Icon(Icons.add, size: 18),
+                  label: Text("Add Panel"),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.green,
+                    backgroundColor: _canAddMorePanels ? Colors.blue : Colors.grey,
                     foregroundColor: Colors.white,
-                    padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                  ),
-                ),
-                SizedBox(width: 8),
-                ElevatedButton.icon(
-                  onPressed: _exportCurrentPageAsPNG,
-                  icon: Icon(Icons.photo_camera, size: 18),
-                  label: Text("Export Page"),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.purple,
-                    foregroundColor: Colors.white,
-                    padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                   ),
                 ),
                 SizedBox(width: 8),
@@ -1621,7 +1972,7 @@ class _PanelLayoutEditorScreenState extends State<PanelLayoutEditorScreen> {
                   label: Text("Edit Panel"),
                   style: ElevatedButton.styleFrom(
                     backgroundColor:
-                        selectedPanel != null ? Colors.orange : Colors.grey,
+                    selectedPanel != null ? Colors.orange : Colors.grey,
                     foregroundColor: Colors.white,
                     padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                   ),
@@ -1629,25 +1980,51 @@ class _PanelLayoutEditorScreenState extends State<PanelLayoutEditorScreen> {
                 SizedBox(width: 8),
                 ElevatedButton.icon(
                   onPressed:
-                      selectedPanel != null ? _deleteSelectedPanel : null,
+                  selectedPanel != null ? _deleteSelectedPanel : null,
                   icon: Icon(Icons.delete, size: 18),
-                  label: Text("Delete"),
+                  label: Text("Delete Panel"),
                   style: ElevatedButton.styleFrom(
                     backgroundColor:
-                        selectedPanel != null ? Colors.red : Colors.grey,
+                    selectedPanel != null ? Colors.red : Colors.grey,
                     foregroundColor: Colors.white,
                     padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                   ),
                 ),
                 SizedBox(width: 8),
                 ElevatedButton.icon(
+                  onPressed: _showLayoutTemplates,
+                  icon: Icon(Icons.dashboard_customize, size: 18),
+                  label: Text("Layout Templates"),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.green,
+                    foregroundColor: Colors.white,
+                    padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  ),
+                ),
+               /* SizedBox(width: 8),
+                ElevatedButton.icon(
+                  onPressed: _exportCurrentPageAsPNG,
+                  icon: Icon(Icons.photo_camera, size: 18),
+                  label: Text("Export Page"),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.purple,
+                    foregroundColor: Colors.white,
+                    padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  ),
+                ),*/
+
+
+
+                SizedBox(width: 8),
+                ElevatedButton.icon(
                   onPressed: () {
                     _saveAsDraft();
                   },
                   icon: Icon(Icons.save),
-                  label: Text("Save as Draft"),
+                  label: Text("Save"),
                   style:
-                      ElevatedButton.styleFrom(backgroundColor: Colors.green),
+                      ElevatedButton.styleFrom(backgroundColor: Colors.green,
+                          foregroundColor: Colors.white),
                 ),
                 SizedBox(width: 8),
                 ElevatedButton.icon(
@@ -1697,7 +2074,12 @@ class _PanelLayoutEditorScreenState extends State<PanelLayoutEditorScreen> {
                   ),
                 ),
               Text(
+                // remove the text showing the  page format
+/*
                 '${pages[_currentPage].length} panel${pages[_currentPage].length != 1 ? 's' : ''} • $_selectedPageFormat',
+*/
+                '${pages[_currentPage].length} panel${pages[_currentPage].length != 1 ? 's' : ''}',
+
                 style: TextStyle(
                   color: Colors.grey[600],
                   fontWeight: FontWeight.bold,
@@ -1726,16 +2108,21 @@ class _PanelLayoutEditorScreenState extends State<PanelLayoutEditorScreen> {
   }
 */
 
-  Widget _buildDraggablePanel(Color color, String label, double xx, double yy,
-      double width, double height) {
+
+
+/*  Widget _buildDraggablePanel(Color color, String label, double xx, double yy,
+      double width, double height)
+  {
     return Draggable<LayoutPanel>(
       data: LayoutPanel(
-        id: label,
+        id: '${label.replaceAll(' ', '_')}_${DateTime.now().microsecondsSinceEpoch}',
         width: width,
         height: height,
         x: xx,
         y: yy,
         backgroundColor: Colors.white,
+        customText: label, // Optional: So you can still identify the type
+
       ),
       feedback: Container(
         width: width * 0.3,
@@ -1793,7 +2180,89 @@ class _PanelLayoutEditorScreenState extends State<PanelLayoutEditorScreen> {
         ),
       ),
     );
+  }*/
+
+  Widget _buildDraggablePanel(
+      Color color,
+      String label,
+      double xx,
+      double yy,
+      double width,
+      double height,
+      )
+  {
+    return Draggable<LayoutPanel>(
+      data: LayoutPanel(
+        // id: '${label.replaceAll(' ', '_')}_${DateTime.now().microsecondsSinceEpoch}',
+        id: '${label} ${pages[_currentPage].length + 1}',
+        label: label, // Add label to the LayoutPanel
+        width: width,
+        height: height,
+        x: xx,
+        y: yy,
+        backgroundColor: Colors.white,
+        customText: label, // Optional: So you can still identify the type
+      ),
+      feedback: Container(
+        width: width * 0.3,
+        height: height * 0.3,
+        decoration: BoxDecoration(
+          color: color.withOpacity(0.7),
+          borderRadius: BorderRadius.circular(4),
+          boxShadow: [BoxShadow(color: Colors.black26, blurRadius: 4)],
+        ),
+        child: Center(
+          child: Text(
+            label,
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: 10,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+        ),
+      ),
+      childWhenDragging: Opacity(
+        opacity: 0.3,
+        child: Container(
+          width: 100,
+          height: 60,
+          decoration: BoxDecoration(
+            color: color,
+            borderRadius: BorderRadius.circular(4),
+          ),
+          child: Center(
+            child: Text(
+              label,
+              style: TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 10),
+            ),
+          ),
+        ),
+      ),
+      child: Container(
+        width: 100,
+        height: 60,
+        decoration: BoxDecoration(
+          color: color,
+          borderRadius: BorderRadius.circular(4),
+          boxShadow: [BoxShadow(color: Colors.black26, blurRadius: 2)],
+        ),
+        child: Center(
+          child: Text(
+            label,
+            style: TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+                fontSize: 10),
+          ),
+        ),
+      ),
+    );
   }
+
 
   void _showExportOptions() {
     Printing.layoutPdf(
@@ -1809,13 +2278,23 @@ class _PanelLayoutEditorScreenState extends State<PanelLayoutEditorScreen> {
       final byteData = await image.toByteData(format: ImageByteFormat.png);
       final pngBytes = byteData!.buffer.asUint8List();
 
+
+      final decoded = await decodeImageFromList(pngBytes);
+      print("🖼️ Image size: ${decoded.width} x ${decoded.height}");
+
       final pdf = pw.Document();
       final imageProvider = pw.MemoryImage(pngBytes);
 
       pdf.addPage(
         pw.Page(
+          pageFormat: PdfPageFormat.a4, // ✅ Set A4 explicitly
           build: (context) => pw.Center(
-            child: pw.Image(imageProvider),
+            child: pw.Image(
+              imageProvider,
+              fit: pw.BoxFit.cover, // or contain/fitHeight
+              width: PdfPageFormat.a4.width,
+              height: PdfPageFormat.a4.height,
+            ),
           ),
         ),
       );
@@ -1830,7 +2309,7 @@ class _PanelLayoutEditorScreenState extends State<PanelLayoutEditorScreen> {
 
 
 
-  Future<Uint8List> generatePdf() async {
+  /*Future<Uint8List> generatePdf() async {
     final pdf = pw.Document();
 
     pdf.addPage(
@@ -1842,7 +2321,7 @@ class _PanelLayoutEditorScreenState extends State<PanelLayoutEditorScreen> {
     );
 
     return pdf.save();
-  }
+  }*/
 }
 
 /*

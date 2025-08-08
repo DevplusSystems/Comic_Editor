@@ -3,7 +3,6 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
-import 'package:fluttertoast/fluttertoast.dart';
 import 'package:printing/printing.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
@@ -12,22 +11,22 @@ import '../PanelLayoutEditorScreen.dart';
 import '../PanelModel/Project.dart';
 
 
-class AllPagesPreviewScreen extends StatefulWidget {
+class TestAllPagesPreviewScreen extends StatefulWidget {
   final List<List<LayoutPanel>> pages;
   final String projectName;
   final String pageFormat;
 
-  const AllPagesPreviewScreen({
+  const TestAllPagesPreviewScreen({
     required this.pages,
     required this.projectName,
     required this.pageFormat,
   });
 
   @override
-  _AllPagesPreviewScreenState createState() => _AllPagesPreviewScreenState();
+  _TestAllPagesPreviewScreenState createState() => _TestAllPagesPreviewScreenState();
 }
 
-class _AllPagesPreviewScreenState extends State<AllPagesPreviewScreen> {
+class _TestAllPagesPreviewScreenState extends State<TestAllPagesPreviewScreen> {
   PageController _pageController = PageController();
   int _currentPageIndex = 0;
   late List<GlobalKey> _pageKeys;
@@ -47,28 +46,11 @@ class _AllPagesPreviewScreenState extends State<AllPagesPreviewScreen> {
       appBar: AppBar(
         backgroundColor: Colors.black,
         foregroundColor: Colors.white,
-/*
         title: Text('${widget.projectName} - ${widget.pageFormat} Preview'),
-*/
-        title: Text('${widget.projectName} - Preview'),
         actions: [
           IconButton(
             icon: Icon(Icons.download),
-/*
             onPressed: _showExportOptions,
-*/
-            onPressed: () {
-              Fluttertoast.showToast(
-                msg: "Export by page is not supported yet.",
-                toastLength: Toast.LENGTH_SHORT,
-                gravity: ToastGravity.BOTTOM,
-                timeInSecForIosWeb: 1,
-                backgroundColor: Colors.grey[800],
-                textColor: Colors.white,
-                fontSize: 14.0,
-              );
-            },
-
             tooltip: 'Export All Pages',
           ),
         ],
@@ -82,10 +64,7 @@ class _AllPagesPreviewScreenState extends State<AllPagesPreviewScreen> {
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 Text(
-/*
                   'Page ${_currentPageIndex + 1} of ${widget.pages.length} • ${widget.pageFormat}',
-*/
-                  'Page ${_currentPageIndex + 1} of ${widget.pages.length} ',
                   style: TextStyle(
                     color: Colors.white,
                     fontSize: 18,
@@ -140,10 +119,7 @@ class _AllPagesPreviewScreenState extends State<AllPagesPreviewScreen> {
                                     ),
                                     SizedBox(height: 16),
                                     Text(
-/*
                                       'Empty ${widget.pageFormat} Page',
-*/
-                                      'Empty Page',
                                       style: TextStyle(
                                         fontSize: 24,
                                         color: Colors.grey[600],
@@ -281,27 +257,133 @@ class _AllPagesPreviewScreenState extends State<AllPagesPreviewScreen> {
 
   Future<Uint8List> _generatePdfFromWidget() async {
     final pdf = pw.Document();
+    final pageSize = PDFPageFormat.formats['A4']!; // use actual A4 size
+    for (int i = 0; i < widget.pages.length; i++) {
+      final repaintBoundary = GlobalKey();
 
-    for (int i = 0; i < _pageKeys.length; i++) {
-      final boundary =
-      _pageKeys[i].currentContext?.findRenderObject() as RenderRepaintBoundary?;
-      if (boundary == null) continue;
+      final widgetToRender = Material(
+        type: MaterialType.transparency,
+        child: Center(
+          child: RepaintBoundary(
+            key: repaintBoundary,
+            child: Container(
+              margin: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                border: Border.all(color: Colors.grey, width: 2),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(8),
+                child: AspectRatio(
+                  aspectRatio: pageSize.width / pageSize.height,
+                  child: Stack(
+                    children: [
+                      if (widget.pages[i].isEmpty)
+                        Center(child: Text("Empty Page")),
+                      ...widget.pages[i].map((panel) {
+                        return Positioned(
+                          left: panel.x,
+                          top: panel.y,
+                          child: Container(
+                            width: panel.width,
+                            height: panel.height,
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: panel.previewImage != null
+                                ? Image.memory(
+                              panel.previewImage!,
+                              fit: BoxFit.cover,
+                              width: panel.width,
+                              height: panel.height,
+                            )
+                                : Container(
+                              color: panel.backgroundColor,
+                              child: Center(child: Text(panel.id)),
+                            ),
+                          ),
+                        );
+                      }).toList(),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
 
-      final image = await boundary.toImage(pixelRatio: 3.0);
-      final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
-      final pngBytes = byteData!.buffer.asUint8List();
-      final imageProvider = pw.MemoryImage(pngBytes);
+      final imageBytes = await _renderWidgetToImage(widgetToRender);
+      final imageProvider = pw.MemoryImage(imageBytes);
+
 
       pdf.addPage(
         pw.Page(
           pageFormat: PdfPageFormat.a4,
-          build: (context) => pw.Center(
-            child: pw.Image(imageProvider),
+          margin: pw.EdgeInsets.zero, // ✅ remove all margins
+          build: (context) => pw.Container(
+            width: PdfPageFormat.a4.width,
+            height: PdfPageFormat.a4.height,
+            child: pw.Image(
+              imageProvider,
+              fit: pw.BoxFit.fill, // ✅ stretch image to fill entire A4 page
+            ),
           ),
         ),
       );
+
     }
 
     return pdf.save();
   }
+  Future<Uint8List> _renderWidgetToImage(Widget widget) async {
+    final repaintKey = GlobalKey();
+
+    final overlayEntry = OverlayEntry(
+      builder: (context) => Material(
+        type: MaterialType.transparency,
+        child: Center(
+          child: RepaintBoundary(
+            key: repaintKey,
+            child: widget,
+          ),
+        ),
+      ),
+    );
+
+    final overlay = Overlay.of(context);
+    if (overlay == null) throw Exception("Overlay not found");
+
+    overlay.insert(overlayEntry);
+
+    await Future.delayed(Duration(milliseconds: 300));
+    await WidgetsBinding.instance.endOfFrame;
+
+    RenderRepaintBoundary? boundary;
+    int retries = 0;
+    while (retries < 10) {
+      await Future.delayed(Duration(milliseconds: 100));
+      boundary = repaintKey.currentContext?.findRenderObject() as RenderRepaintBoundary?;
+      if (boundary != null && !boundary.debugNeedsPaint) break;
+      retries++;
+    }
+
+    if (boundary == null || boundary.debugNeedsPaint) {
+      overlayEntry.remove();
+      throw Exception("Widget is not fully painted.");
+    }
+
+    final image = await boundary.toImage(pixelRatio: 5.0); // 👈 Use high resolution
+    final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
+    final pngBytes = byteData!.buffer.asUint8List();
+
+    final decoded = await decodeImageFromList(pngBytes);
+    print("🖼️ Rendered image size: ${decoded.width} x ${decoded.height}");
+
+    overlayEntry.remove();
+
+    return byteData!.buffer.asUint8List();
+  }
+
 }

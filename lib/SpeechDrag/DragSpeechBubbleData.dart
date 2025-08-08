@@ -1,14 +1,15 @@
 import 'package:flutter/material.dart';
 
-import 'SpeechBubbleComponents.dart';
+import 'DragSpeechBubbleComponents.dart';
+
 
 class DragSpeechBubbleData {
   final String text;
   final Color bubbleColor;
   final Color borderColor;
   final double borderWidth;
-  final BubbleShape bubbleShape;
-  final TailPosition tailPosition;
+  final DragBubbleShape bubbleShape;
+  final Offset tailOffset;
   final double padding;
   final double fontSize;
   final Color textColor;
@@ -22,7 +23,7 @@ class DragSpeechBubbleData {
     required this.borderColor,
     required this.borderWidth,
     required this.bubbleShape,
-    required this.tailPosition,
+    required this.tailOffset,
     required this.padding,
     required this.fontSize,
     required this.textColor,
@@ -37,8 +38,8 @@ class DragSpeechBubbleData {
       bubbleColor: Colors.white,
       borderColor: Colors.black,
       borderWidth: 2.0,
-      bubbleShape: BubbleShape.rectangle,
-      tailPosition: TailPosition.bottomLeft,
+      bubbleShape: DragBubbleShape.rectangle,
+      tailOffset: Offset(100, 120),
       padding: 12.0,
       fontSize: 16.0,
       textColor: Colors.black,
@@ -55,7 +56,7 @@ class DragSpeechBubbleData {
       'borderColor': borderColor.value,
       'borderWidth': borderWidth,
       'bubbleShape': bubbleShape.index,
-      'tailPosition': tailPosition.index,
+      'tailOffset': {'dx': tailOffset.dx, 'dy': tailOffset.dy},
       'padding': padding,
       'fontSize': fontSize,
       'textColor': textColor.value,
@@ -71,8 +72,11 @@ class DragSpeechBubbleData {
       bubbleColor: Color(map['bubbleColor']),
       borderColor: Color(map['borderColor']),
       borderWidth: (map['borderWidth'] ?? 2.0).toDouble(),
-      bubbleShape: BubbleShape.values[map['bubbleShape']],
-      tailPosition: TailPosition.values[map['tailPosition']],
+      bubbleShape: DragBubbleShape.values[map['bubbleShape']],
+      tailOffset: Offset(
+        map['tailOffset']['dx']?.toDouble() ?? 100,
+        map['tailOffset']['dy']?.toDouble() ?? 120,
+      ),
       padding: (map['padding'] ?? 12.0).toDouble(),
       fontSize: (map['fontSize'] ?? 16.0).toDouble(),
       textColor: Color(map['textColor']),
