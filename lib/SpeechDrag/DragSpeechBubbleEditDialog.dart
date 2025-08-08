@@ -49,10 +49,13 @@ class _DragSpeechBubbleEditDialogState
     'Impact',
     'Verdana',
   ];
+
   String _getBubbleShapeName(DragBubbleShape shape) {
     switch (shape) {
       case DragBubbleShape.rectangle:
         return 'Rectangle';
+      case DragBubbleShape.shout:
+        return 'Shout';
       default:
         return 'Unknown';
     }
@@ -85,13 +88,12 @@ class _DragSpeechBubbleEditDialogState
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-
               SizedBox(
                 width: 500,
                 height: 220, // Full height including tail space
                 child: Stack(
                   children: [
-                  /*  CustomPaint(
+                    /*  CustomPaint(
                       size: const Size(300, 240), // Taller canvas
                       painter: DragSpeechBubblePainter(
                         bubbleColor: _bubbleColor,
@@ -117,7 +119,8 @@ class _DragSpeechBubbleEditDialogState
                       child: CustomPaint(
                         size: const Size(300, 240),
                         painter: DragSpeechBubblePainter(
-                          bubbleColor: _bubbleColor,          // ✅ use updated values
+                          bubbleColor: _bubbleColor,
+                          // ✅ use updated values
                           borderColor: _borderColor,
                           borderWidth: _borderWidth,
                           bubbleShape: _bubbleShape,
@@ -140,30 +143,31 @@ class _DragSpeechBubbleEditDialogState
                         ),
                       ),
                     ),
-                    Positioned(
-                      left: _tailOffset.dx - 10,
-                      top: _tailOffset.dy - 10,
-                      child: GestureDetector(
-                        onPanUpdate: (details) {
-                          setState(() {
-                            _tailOffset += details.delta;
-                            _tailOffset = Offset(
-                              _tailOffset.dx.clamp(0, 320),
-                              _tailOffset.dy.clamp(0, 200),
-                            );
-                          });
-                        },
-                        child: Container(
-                          width: 20,
-                          height: 20,
-                          decoration: BoxDecoration(
-                            color: Colors.red,
-                            shape: BoxShape.circle,
-                            border: Border.all(color: Colors.black),
+                    if (_bubbleShape != DragBubbleShape.shout)
+                      Positioned(
+                        left: _tailOffset.dx - 10,
+                        top: _tailOffset.dy - 10,
+                        child: GestureDetector(
+                          onPanUpdate: (details) {
+                            setState(() {
+                              _tailOffset += details.delta;
+                              _tailOffset = Offset(
+                                _tailOffset.dx.clamp(0, 320),
+                                _tailOffset.dy.clamp(0, 200),
+                              );
+                            });
+                          },
+                          child: Container(
+                            width: 20,
+                            height: 20,
+                            decoration: BoxDecoration(
+                              color: Colors.red,
+                              shape: BoxShape.circle,
+                              border: Border.all(color: Colors.black),
+                            ),
                           ),
                         ),
                       ),
-                    ),
                   ],
                 ),
               ),
@@ -357,9 +361,10 @@ class _DragSpeechBubbleEditDialogState
             child: const Text("Cancel")),
         ElevatedButton(
           onPressed: () {
-
-            final renderBox = _bubbleKey.currentContext?.findRenderObject() as RenderBox?;
-            final actualSize = renderBox?.size ?? const Size(150, 100); // fallback
+            final renderBox =
+                _bubbleKey.currentContext?.findRenderObject() as RenderBox?;
+            final actualSize =
+                renderBox?.size ?? const Size(150, 100); // fallback
 
             Navigator.pop(context, {
               'text': _textController.text,
@@ -374,7 +379,7 @@ class _DragSpeechBubbleEditDialogState
               'fontWeight': _fontWeight,
               'fontStyle': _fontStyle,
               'padding': _padding,
-              'width': actualSize.width,   // 👈 include size
+              'width': actualSize.width, // 👈 include size
               'height': actualSize.height, // 👈 include size
             });
           },
@@ -436,7 +441,6 @@ class _DragSpeechBubbleEditDialogState
       ],
     );
   }
-
 
   @override
   void dispose() {

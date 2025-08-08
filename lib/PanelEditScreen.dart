@@ -189,7 +189,7 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
         );
         break;
 
-      case 'text':
+     /* case 'text':
         child = SizedBox(
           width: element.width,
           height: element.height,
@@ -207,9 +207,29 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
             ),
           ),
         );
+        break;*/
+
+      case 'text':
+        child = Container(
+          width: element.width,
+          height: element.height,
+          alignment: Alignment.center,
+          child: Text(
+            element.value,
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontSize: element.fontSize ?? 16,
+              color: element.color ?? Colors.black,
+              fontFamily: element.fontFamily,
+              fontWeight: element.fontWeight ?? FontWeight.normal,
+              fontStyle: element.fontStyle ?? FontStyle.normal,
+            ),
+          ),
+        );
         break;
 
-      /*  case 'text':
+
+     /* case 'text':
         child = SizedBox(
           width: element.width,
           height: element.height,
@@ -224,8 +244,7 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
             ),
           ),
         );
-        break;
-*/
+        break;*/
 
       /*  case 'speech_bubble':
         child = _buildSpeechBubble(element);
@@ -243,6 +262,7 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
         if (_isEditing) {
           return ResizableDraggable(
             key: elementKeys[index],
+            isSelected: selectedElementIndex == index, // ✅
             size: Size(element.width, element.height),
             initialTop: element.offset.dy,
             initialLeft: element.offset.dx,
@@ -307,7 +327,7 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
         );
         break;
 
-      case 'image':
+     /* case 'image':
         child = Container(
           width: element.width,
           height: element.height,
@@ -329,7 +349,36 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
             ),
           ),
         );
+        break;*/
+      case 'image':
+        child = Container(
+          width: element.width,
+          height: element.height,
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(5),
+            child: FittedBox(
+              fit: BoxFit.contain, // ✅ FIXED: Prevents cropping or overflow
+              child: Image.file(
+                File(element.value),
+                errorBuilder: (context, error, stackTrace) {
+                  return Container(
+                    width: element.width,
+                    height: element.height,
+                    color: Colors.grey[300],
+                    child: const Icon(Icons.broken_image, color: Colors.grey),
+                  );
+                },
+              ),
+            ),
+          ),
+        );
         break;
+
+
+
+
+
+
       case 'Draw':
         final points = element.value.split(';').map((pair) {
           final coords = pair.split(',');
@@ -359,6 +408,7 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
         if (_isEditing) {
           return ResizableDraggable(
             key: elementKeys[index],
+            isSelected: selectedElementIndex == index, // ✅
             size: Size(element.width, element.height),
             initialTop: element.offset.dy,
             initialLeft: element.offset.dx,
@@ -418,6 +468,7 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
     if (_isEditing) {
       return ResizableDraggable(
         key: elementKeys[index],
+        isSelected: selectedElementIndex == index, // ✅
         size: elementSize,
         initialTop: element.offset.dy,
         initialLeft: element.offset.dx,
@@ -471,6 +522,144 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
 
   /*text tool bar at the top left*/
 
+
+  Widget _buildFloatingToolbox(PanelElementModel element) {
+    List<Widget> toolIcons = [];
+
+    switch (element.type) {
+      case 'text':
+        toolIcons = [
+          _toolIcon(
+            id: 'color',
+            icon: Icons.format_color_text,
+            tooltip: 'Text Color',
+            onTap: () => _changeTextColorById(element.id),
+          ),
+          _toolIcon(
+            id: 'size',
+            icon: Icons.format_size,
+            tooltip: 'Font Size',
+            onTap: () => _changeFontSizeById(element.id),
+          ),
+          _toolIcon(
+            id: 'bold',
+            icon: Icons.format_bold,
+            tooltip: 'Bold',
+            onTap: () => _toggleBoldById(element.id),
+          ),
+          _toolIcon(
+            id: 'italic',
+            icon: Icons.format_italic,
+            tooltip: 'Italic',
+            onTap: () => _toggleItalicById(element.id),
+          ),
+          _toolIcon(
+            id: 'delete',
+            icon: Icons.delete,
+            tooltip: 'Delete',
+            onTap: () => _deleteElementById(element.id),
+          ),
+        ];
+        break;
+
+      case 'image':
+        toolIcons = [
+          /*_toolIcon(
+            id: 'rotate',
+            icon: Icons.rotate_right,
+            tooltip: 'Rotate 90°',
+            onTap: () {
+              final index = selectedElementIndex!;
+              final e = currentElements[index];
+              setState(() {
+                currentElements[index] = e.copyWith(
+                  rotationAngle: ((e.rotationAngle ?? 0) + 90) % 360,
+                );
+              });
+            },
+          ),*/
+       /*   _toolIcon(
+            id: 'flipX',
+            icon: Icons.flip,
+            tooltip: 'Flip Horizontal',
+            onTap: () {
+              final index = selectedElementIndex!;
+              final e = currentElements[index];
+              setState(() {
+                currentElements[index] = e.copyWith(
+                  flipX: !(e.flipX ?? false),
+                );
+              });
+            },
+          ),*/
+         /* _toolIcon(
+            id: 'flipY',
+            icon: Icons.flip_camera_android,
+            tooltip: 'Flip Vertical',
+            onTap: () {
+              final index = selectedElementIndex!;
+              final e = currentElements[index];
+              setState(() {
+                currentElements[index] = e.copyWith(
+                  flipY: !(e.flipY ?? false),
+                );
+              });
+            },
+          ),*/
+         /* _toolIcon(
+            id: 'crop',
+            icon: Icons.crop,
+            tooltip: 'Crop Image',
+            onTap: () => _cropImageById(element.id),
+          ),*/
+          _toolIcon(
+            id: 'replace',
+            icon: Icons.image_search,
+            tooltip: 'Replace Image',
+            onTap: () => _replaceImageById(element.id),
+          ),
+          _toolIcon(
+            id: 'delete',
+            icon: Icons.delete,
+            tooltip: 'Delete',
+            onTap: () => _deleteElementById(element.id),
+          ),
+        ];
+        break;
+
+      default:
+        return const SizedBox.shrink(); // Don't show toolbox for other types
+    }
+
+    return Align(
+      alignment: Alignment.centerRight,
+      child: Padding(
+        padding: const EdgeInsets.only(right: 10),
+        child: Material(
+          elevation: 6,
+          borderRadius: BorderRadius.circular(8),
+          color: Colors.white,
+          child: Container(
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(8),
+              boxShadow: const [
+                BoxShadow(color: Colors.black26, blurRadius: 4),
+              ],
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: toolIcons,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+
+/*
   Widget _buildFloatingToolbox(PanelElementModel element) {
     return Align(
       alignment: Alignment.centerRight,
@@ -522,6 +711,12 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
                   tooltip: 'Delete',
                   onTap: () => _deleteElementById(element.id),
                 ),
+                _toolIcon(
+                  id: 'replace',
+                  icon: Icons.image_search,
+                  tooltip: 'Replace Image',
+                  onTap: () => _replaceImageById(element.id),
+                ),
               ],
             ),
           ),
@@ -529,6 +724,7 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
       ),
     );
   }
+*/
 
   Widget _toolIcon({
     required String id,
@@ -576,7 +772,7 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
       builder: (context) {
         return AlertDialog(
           title: const Text("Pick Text Color"),
-          content: BlockPicker(
+          content: MaterialPicker(              //BlockPicker
             pickerColor: selectedColor,
             onColorChanged: (color) {
               selectedColor = color;
@@ -615,19 +811,22 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
 
         return AlertDialog(
           title: const Text("Set Font Size"),
-          content: StatefulBuilder(
-            builder: (context, setState) {
-              return Slider(
-                min: 8,
-                max: 72,
-                divisions: 64,
-                value: tempSize,
-                label: tempSize.toStringAsFixed(0),
-                onChanged: (value) {
-                  setState(() => tempSize = value);
-                },
-              );
-            },
+          content: SizedBox(
+            height: 80, // ✅ Limit height to just what you need
+            child: StatefulBuilder(
+              builder: (context, setState) {
+                return Slider(
+                  min: 8,
+                  max: 72,
+                  divisions: 64,
+                  value: tempSize,
+                  label: tempSize.toStringAsFixed(0),
+                  onChanged: (value) {
+                    setState(() => tempSize = value);
+                  },
+                );
+              },
+            ),
           ),
           actions: [
             TextButton(
@@ -648,6 +847,7 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
         currentElements[index] =
             currentElements[index].copyWith(fontSize: newSize);
       });
+
     }
   }
 
@@ -677,6 +877,20 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
       currentElements[index] =
           currentElements[index].copyWith(fontStyle: newStyle);
     });
+  }
+  void _replaceImageById(String id) async {
+    final index = currentElements.indexWhere((e) => e.id == id);
+    if (index == -1) return;
+
+    final picker = ImagePicker();
+    final pickedFile = await picker.pickImage(source: ImageSource.gallery);
+    if (pickedFile != null) {
+      setState(() {
+        currentElements[index] = currentElements[index].copyWith(
+          value: pickedFile.path,
+        );
+      });
+    }
   }
 
   void _deleteElementById(String id) {
@@ -1233,10 +1447,16 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
             ],
           ),
 
-          // ✅ Floating vertical toolbox ABOVE RepaintBoundary
-          if (selectedElementIndex != null &&
-              currentElements[selectedElementIndex!].type == 'text')
+        /*  // ✅ Floating vertical toolbox ABOVE RepaintBoundary
+          if (selectedElementIndex != null && currentElements[selectedElementIndex!].type == 'text')
             _buildFloatingToolbox(currentElements[selectedElementIndex!]),
+          if (selectedElementIndex != null &&
+              currentElements[selectedElementIndex!].type == 'image')
+            _buildFloatingToolbox(currentElements[selectedElementIndex!]),*/
+
+          if (selectedElementIndex != null)
+            _buildFloatingToolbox(currentElements[selectedElementIndex!]),
+
         ],
       ),
     );
@@ -1357,7 +1577,7 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
       builder: (context) => AlertDialog(
         title: const Text("Pick Background Color"),
         content: SingleChildScrollView(
-          child: BlockPicker(
+          child: MaterialPicker(
             pickerColor: tempColor,
             onColorChanged: (color) {
               tempColor = color;
@@ -1582,6 +1802,8 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
     return textPainter.size;
   }
 }
+
+
 
 /*
   void _showColorPicker(BuildContext context) {

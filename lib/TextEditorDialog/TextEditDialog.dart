@@ -128,7 +128,7 @@ class _TextEditDialogState extends State<TextEditDialog> {
                       builder: (context) => AlertDialog(
                         title: const Text('Pick Text Color'),
                         content: SingleChildScrollView(
-                          child: BlockPicker(
+                          child: MaterialPicker(
                             pickerColor: _textColor,
                             onColorChanged: (color) => Navigator.pop(context, color),
                           ),

@@ -53,7 +53,7 @@ class _BubbleEditDialogState extends State<BubbleEditDialog> {
                     builder: (context) => AlertDialog(
                       title: const Text('Pick Bubble Color'),
                       content: SingleChildScrollView(
-                        child: BlockPicker(
+                        child: MaterialPicker(
                           pickerColor: _bubbleColor,
                           onColorChanged: (color) => Navigator.pop(context, color),
                         ),

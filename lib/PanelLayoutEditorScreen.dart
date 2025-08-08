@@ -311,6 +311,7 @@ class _PanelLayoutEditorScreenState extends State<PanelLayoutEditorScreen> {
       pages[_currentPage].add(newPanel);
     });
   }*/
+/*
   void _addSinglePanel() {
     final panelWidth = (_canvasWidth - (_pageMargin * 2)) / 2; // Two panels per row
     final panelHeight = _canvasHeight * 0.25;
@@ -334,6 +335,58 @@ class _PanelLayoutEditorScreenState extends State<PanelLayoutEditorScreen> {
       pages[_currentPage].add(newPanel);
     });
   }
+*/
+
+  void _addSinglePanel() {
+    final panelWidth = (_canvasWidth - (_pageMargin * 2)) / 2; // Two panels per row
+    final panelHeight = _canvasHeight * 0.25;
+
+    final newPanel = LayoutPanel(
+      // id: "Panel_${DateTime.now().microsecondsSinceEpoch}", // Unique ID always
+      id: "Panel ${pages[_currentPage].length + 1}", // 👈 Human-readable ID
+      width: panelWidth,
+      height: panelHeight,
+      x: _pageMargin,
+      y: _pageMargin,
+      backgroundColor: Colors.white,
+    );
+
+    Offset? freePosition = _findFreePosition(newPanel);
+
+    if (freePosition == null) {
+      // No space available
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text("No more space on this page. Add a new page."),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+
+    newPanel.x = freePosition.dx;
+    newPanel.y = freePosition.dy;
+
+    setState(() {
+      pages[_currentPage].add(newPanel);
+    });
+  }
+
+
+  bool get _canAddMorePanels {
+    final panelWidth = (_canvasWidth - (_pageMargin * 2)) / 2;
+    final panelHeight = _canvasHeight * 0.25;
+    final testPanel = LayoutPanel(
+      id: 'test',
+      width: panelWidth,
+      height: panelHeight,
+      x: 0,
+      y: 0,
+      backgroundColor: Colors.white,
+    );
+    return _findFreePosition(testPanel) != null;
+  }
+
 
 
 
@@ -1583,7 +1636,7 @@ class _PanelLayoutEditorScreenState extends State<PanelLayoutEditorScreen> {
             onPressed: () {
 
               Fluttertoast.showToast(
-                msg: "Exporting all pages is not supported yet.",
+                msg: "Exporting by page is not supported yet.",
                 toastLength: Toast.LENGTH_SHORT,
                 gravity: ToastGravity.BOTTOM,
                 backgroundColor: Colors.grey[800],
@@ -1597,6 +1650,16 @@ class _PanelLayoutEditorScreenState extends State<PanelLayoutEditorScreen> {
             icon: Icons.remove_red_eye,
             label: 'Preview',
             onPressed: _showAllPagesPreview,
+          ),
+          SizedBox(width: 8),
+          _buildAppBarButton(
+            icon: _showPageMargins ? Icons.pages_outlined : Icons.pages,
+            label: _showPageMargins ? 'Hide Margin' : 'Show Margin',
+            onPressed: () {
+              setState(() {
+                _showPageMargins = !_showPageMargins;
+              });
+            },
           ),
           SizedBox(width: 8),
           _buildAppBarButton(
@@ -1717,9 +1780,10 @@ class _PanelLayoutEditorScreenState extends State<PanelLayoutEditorScreen> {
             SizedBox(height: 12),
 
             // Rounded rectangle (wide)
-            _buildDraggablePanel(
+            _buildDraggablePanel
+              (
               Colors.red,
-              'Wide Panel',
+              'Wide',
               0,
               0,
               _canvasWidth - 2 * _pageMargin, // ✅ full width respecting margins
@@ -1729,7 +1793,7 @@ class _PanelLayoutEditorScreenState extends State<PanelLayoutEditorScreen> {
 
             _buildDraggablePanel(
               Colors.teal,
-              'Two Half Panels', // draggable label
+              'Two Half', // draggable label
               0,
               0,
               (_canvasWidth - 2 * _pageMargin) / 2, // ✅ visually half-width in drawer
@@ -1741,7 +1805,7 @@ class _PanelLayoutEditorScreenState extends State<PanelLayoutEditorScreen> {
             // Vertical rectangle (tall)
             _buildDraggablePanel(
               Colors.green,
-              'Tall Panel',
+              'Tall',
               0,
               0,
               _canvasWidth * 0.35,
@@ -1753,7 +1817,7 @@ class _PanelLayoutEditorScreenState extends State<PanelLayoutEditorScreen> {
             // Medium square panel
             _buildDraggablePanel(
               Colors.orange,
-              'Square Panel',
+              'Square',
               0,
               0,
               _canvasWidth * 0.4,
@@ -1765,7 +1829,7 @@ class _PanelLayoutEditorScreenState extends State<PanelLayoutEditorScreen> {
             // Short wide panel (like footer)
             _buildDraggablePanel(
               Colors.blue,
-              'Short Panel',
+              'Short',
               0,
               0,
               _canvasWidth * 0.7,
@@ -1777,7 +1841,7 @@ class _PanelLayoutEditorScreenState extends State<PanelLayoutEditorScreen> {
             // Small bubble panel
             _buildDraggablePanel(
               Colors.purple,
-              'Small Bubble',
+              'Small ',
               0,
               0,
               _canvasWidth * 0.25,
@@ -1881,7 +1945,7 @@ class _PanelLayoutEditorScreenState extends State<PanelLayoutEditorScreen> {
             scrollDirection: Axis.horizontal,
             child: Row(
               children: [
-                ElevatedButton.icon(
+               /* ElevatedButton.icon(
                   onPressed: _addSinglePanel,
                   icon: Icon(Icons.add, size: 18),
                   label: Text("Add Panel"),
@@ -1889,6 +1953,16 @@ class _PanelLayoutEditorScreenState extends State<PanelLayoutEditorScreen> {
                     backgroundColor: Colors.blue,
                     foregroundColor: Colors.white,
                     padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  ),
+                ),
+*/
+                ElevatedButton.icon(
+                  onPressed: _canAddMorePanels ? _addSinglePanel : null,
+                  icon: Icon(Icons.add, size: 18),
+                  label: Text("Add Panel"),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: _canAddMorePanels ? Colors.blue : Colors.grey,
+                    foregroundColor: Colors.white,
                   ),
                 ),
                 SizedBox(width: 8),
@@ -2119,7 +2193,8 @@ class _PanelLayoutEditorScreenState extends State<PanelLayoutEditorScreen> {
   {
     return Draggable<LayoutPanel>(
       data: LayoutPanel(
-        id: '${label.replaceAll(' ', '_')}_${DateTime.now().microsecondsSinceEpoch}',
+        // id: '${label.replaceAll(' ', '_')}_${DateTime.now().microsecondsSinceEpoch}',
+        id: '${label} ${pages[_currentPage].length + 1}',
         label: label, // Add label to the LayoutPanel
         width: width,
         height: height,

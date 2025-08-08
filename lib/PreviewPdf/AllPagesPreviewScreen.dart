@@ -59,7 +59,7 @@ class _AllPagesPreviewScreenState extends State<AllPagesPreviewScreen> {
 */
             onPressed: () {
               Fluttertoast.showToast(
-                msg: "Exporting all pages is not supported yet.",
+                msg: "Export by page is not supported yet.",
                 toastLength: Toast.LENGTH_SHORT,
                 gravity: ToastGravity.BOTTOM,
                 timeInSecForIosWeb: 1,

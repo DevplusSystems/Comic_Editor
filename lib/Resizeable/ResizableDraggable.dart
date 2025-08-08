@@ -12,6 +12,9 @@ class ResizableDraggable extends StatefulWidget {
   final double maxWidth;
   final double maxHeight;
 
+  final bool isSelected;
+
+
   const ResizableDraggable({
     super.key,
     required this.child,
@@ -23,6 +26,8 @@ class ResizableDraggable extends StatefulWidget {
     this.minHeight = 10.0,
     this.maxWidth = double.infinity,
     this.maxHeight = double.infinity,
+    this.isSelected = false, // default
+
   });
 
   @override
@@ -62,12 +67,13 @@ class ResizableDraggableState extends State<ResizableDraggable> {
         child: Container(
           width: width,
           height: height,
-          decoration: BoxDecoration(
+          /*decoration: BoxDecoration(
             border: Border.all(color: Colors.blue.withOpacity(0.3), width: 1),
-          ),
+          ),*/
           child: Stack(
             children: [
               Positioned.fill(child: widget.child),
+              if (widget.isSelected)
               Align(
                 alignment: Alignment.bottomRight,
                 child: GestureDetector(
@@ -83,15 +89,15 @@ class ResizableDraggableState extends State<ResizableDraggable> {
                     widget.onPositionChanged?.call(position, size);
                   },
                   child: Container(
-                    width: 20,
-                    height: 20,
+                    width: 25,
+                    height: 25,
                     decoration: const BoxDecoration(
                       color: Colors.blue,
                       borderRadius: BorderRadius.all(Radius.circular(10)),
                     ),
                     child: const Icon(
                       Icons.open_with,
-                      size: 12,
+                      size: 15,
                       color: Colors.white,
                     ),
                   ),

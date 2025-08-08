@@ -357,10 +357,10 @@ class _ProjectsListScreenState extends State<ProjectsListScreen> {
         // 👇 Profile image on the far left
         leading: Padding(
           padding: const EdgeInsets.all(8.0),
-          child: CircleAvatar(
+          /*child: CircleAvatar(
             backgroundImage: AssetImage('assets/images/profile_icon.jpg'),
             backgroundColor: Colors.transparent,
-          ),
+          ),*/
         ),
 
         // 👇 Centered title only
