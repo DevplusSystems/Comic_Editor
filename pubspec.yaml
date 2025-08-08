@@ -79,6 +79,19 @@ flutter:
   assets:
     - assets/images/profile_icon.jpg
     - assets/images/ic_layout.png
+    - assets/characters/ic_super_hero_1.png
+    - assets/characters/ic_engineer.png
+    - assets/characters/ic_super_hero.png
+    - assets/characters/ic_women.png
+    - assets/characters/ic_boy.png
+    - assets/characters/ic_super_hero_3.png
+    - assets/clipart/ic_strength.png
+    - assets/clipart/ic_thank_you.png
+    - assets/clipart/ic_super_power.png
+    - assets/clipart/ic_comic_book.png
+    - assets/clipart/ic_dog.png
+    - assets/clipart/ic_mr_blobby.png
+    - assets/clipart/ic_happy_face.png
 
   # To add assets to your application, add an assets section, like this:
   # assets:

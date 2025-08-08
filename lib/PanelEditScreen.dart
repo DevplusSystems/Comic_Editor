@@ -6,6 +6,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_colorpicker/flutter_colorpicker.dart';
+import 'package:flutter_svg/svg.dart';
 import 'package:image_picker/image_picker.dart';
 
 import 'package:flutter/rendering.dart';
@@ -26,11 +27,13 @@ import 'TextEditorDialog/TextEditDialog.dart';
 class PanelEditScreen extends StatefulWidget {
   final ComicPanel panel;
   final Offset panelOffset;
+  final Size panelSize; // size of the panel
 
   const PanelEditScreen({
     super.key,
     required this.panel,
     required this.panelOffset,
+    required this.panelSize, // size of the panel
   });
 
   @override
@@ -58,7 +61,7 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
 
   final GlobalKey _panelContentKey = GlobalKey();
   int? selectedElementIndex;
-   double aspectRatio = 3 / 4; // or 4 / 3 if landscape
+  double aspectRatio = 3 / 4; // or 4 / 3 if landscape
   List<IconData> clipArtIcons = [
     Icons.star,
     Icons.favorite,
@@ -94,6 +97,7 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
     'pets': Icons.pets,
     'sports_esports': Icons.sports_esports,
   };
+
   @override
   void initState() {
     super.initState();
@@ -113,6 +117,9 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final w = widget.panelSize.width;
+    final h = widget.panelSize.height;
+
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
@@ -170,21 +177,28 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
         ],
       ),
       body: Stack(
-        clipBehavior: Clip.none,
+        clipBehavior: Clip.hardEdge, // ⬅️ keep visuals inside the panel
         children: [
           Column(
             children: [
               // Panel Canvas Area
               Expanded(
-                child: Center( // ensures it's centered if there's padding/margin
+                child: Center(
+                  // ensures it's centered if there's padding/margin
                   child: AspectRatio(
-                    aspectRatio: aspectRatio, // or 4 / 3 or any other fixed ratio
+/*
+                    aspectRatio: aspectRatio,
+*/
+                    aspectRatio: w / h, // lock aspect
+                    // or 4 / 3 or any other fixed ratio
                     child: RepaintBoundary(
                       key: _panelContentKey,
                       child: Container(
+                        width: w,              // logical canvas width
+                        height: h,
                         color: _selectedBackgroundColor,
                         child: Stack(
-                          clipBehavior: Clip.none,
+                          clipBehavior: Clip.hardEdge, // ⬅️ keep visuals inside the panel
                           children: [
                             if (_isEditing)
                               CustomPaint(
@@ -207,7 +221,8 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
                                 child: Text(
                                   'No elements added yet.\nUse the tools below to add content.',
                                   textAlign: TextAlign.center,
-                                  style: TextStyle(fontSize: 16, color: Colors.grey),
+                                  style: TextStyle(
+                                      fontSize: 16, color: Colors.grey),
                                 ),
                               ),
                           ],
@@ -231,50 +246,75 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
   Widget _buildElementWidget(PanelElementModel element, int index) {
     Widget child;
     switch (element.type) {
-
-
-    /*case 'clipart':
-        try {
-          child = SizedBox(
-            width: element.width,
-            height: element.height,
-            child: FittedBox(
-              fit: BoxFit.contain,
-              child: Icon(
-                IconData(
-                  int.parse(element.value),
-                  fontFamily: element.fontFamily ?? 'MaterialIcons', // ✅ required
-                ),
-                color: element.color ?? Colors.yellow,
-              ),
-
-            ),
-          );
-        } catch (e) {
-          print('Error parsing clipart icon: $e');
-          child = SizedBox(
-            width: element.width,
-            height: element.height,
-            child: Icon(
-              Icons.star,
-              size: element.height * 0.8,
-              color: element.color ?? Colors.yellow,
-            ),
-          );
-        }
-        break;*/
-
-      case 'character':
-        child = SizedBox(
+/*      case 'character':
+      case 'clipart':
+        final isSvg = element.value.toLowerCase().endsWith('.svg');
+        final box = SizedBox(
           width: element.width,
           height: element.height,
           child: FittedBox(
             fit: BoxFit.contain,
-            child: Text(
-              element.value,
-              style: TextStyle(
-                fontSize: element.height * 0.8,
-                color: element.color ?? Colors.black,
+            child: isSvg
+                ? SvgPicture.asset(element.value)
+                : Image.asset(element.value),
+          ),
+        );
+
+        if (_isEditing) {
+          return ResizableDraggable(
+            key: elementKeys[index],
+            isSelected: selectedElementIndex == index,
+            size: Size(element.width, element.height),
+            initialTop: element.offset.dy,
+            initialLeft: element.offset.dx,
+            onPositionChanged: (pos, size) {
+              setState(() {
+                currentElements[index] = currentElements[index].copyWith(
+                  offset: pos,
+                  size: size,
+                  width: size.width,
+                  height: size.height,
+                );
+              });
+            },
+            child: GestureDetector(
+              onTap: () => setState(() =>
+              selectedElementIndex = selectedElementIndex == index ? null : index),
+              onDoubleTap: () => _editElement(index),
+              child: box,
+            ),
+          );
+        } else {
+          return Positioned(
+            top: element.offset.dy,
+            left: element.offset.dx,
+            child: SizedBox(
+              width: element.width,
+              height: element.height,
+              child: box,
+            ),
+          );
+        }*/
+
+      case 'character':
+      case 'clipart':
+        child = Container(
+          width: element.width,
+          height: element.height,
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(5),
+            child: FittedBox(
+              fit: BoxFit.contain,
+              child: Image.asset(
+                (element.value),
+                errorBuilder: (context, error, stackTrace) {
+                  return Container(
+                    width: element.width,
+                    height: element.height,
+                    color: Colors.grey[300],
+                    child: const Icon(Icons.broken_image, color: Colors.grey),
+                  );
+                },
               ),
             ),
           ),
@@ -304,7 +344,7 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
         final decoratedChild = Container(
           decoration: BoxDecoration(
             border:
-            isSelected ? Border.all(color: Colors.blue, width: 2) : null,
+                isSelected ? Border.all(color: Colors.blue, width: 2) : null,
           ),
           child: _buildSpeechBubble(element),
         );
@@ -397,7 +437,7 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
         final decoratedChild = Container(
           decoration: BoxDecoration(
             border:
-            isSelected ? Border.all(color: Colors.blue, width: 2) : null,
+                isSelected ? Border.all(color: Colors.blue, width: 2) : null,
           ),
           child: drawingWidget,
         );
@@ -484,7 +524,7 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
           onTap: () {
             setState(() {
               selectedElementIndex =
-              selectedElementIndex == index ? null : index;
+                  selectedElementIndex == index ? null : index;
             });
           },
           onDoubleTap: () {
@@ -650,13 +690,13 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
       ),
     );
   }
+
   Widget _toolIcon({
     required String id,
     required IconData icon,
     required String tooltip,
     required VoidCallback onTap,
-  })
-  {
+  }) {
     final isActive = _activeToolId == id;
 
     return Container(
@@ -697,7 +737,8 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
       builder: (context) {
         return AlertDialog(
           title: const Text("Pick Text Color"),
-          content: MaterialPicker(              //BlockPicker
+          content: MaterialPicker(
+            //BlockPicker
             pickerColor: selectedColor,
             onColorChanged: (color) {
               selectedColor = color;
@@ -772,7 +813,6 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
         currentElements[index] =
             currentElements[index].copyWith(fontSize: newSize);
       });
-
     }
   }
 
@@ -803,6 +843,7 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
           currentElements[index].copyWith(fontStyle: newStyle);
     });
   }
+
   void _replaceImageById(String id) async {
     final index = currentElements.indexWhere((e) => e.id == id);
     if (index == -1) return;
@@ -927,7 +968,7 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
         _editTextElement(index);
         break;
       default:
-      // Show generic edit options
+        // Show generic edit options
         break;
     }
   }
@@ -1078,14 +1119,13 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
           .findRenderObject() as RenderRepaintBoundary;
       ui.Image image = await boundary.toImage(pixelRatio: 2.0);
       ByteData? byteData =
-      await image.toByteData(format: ui.ImageByteFormat.png);
+          await image.toByteData(format: ui.ImageByteFormat.png);
       return byteData?.buffer.asUint8List();
     } catch (e) {
       print('Error capturing panel image: $e');
       return null;
     }
   }
-
 
   Widget _buildToolOptions() {
     return Positioned(
@@ -1095,7 +1135,7 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
       child: Center(
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-          margin: const EdgeInsets.symmetric(horizontal: 14,vertical: 10),
+          margin: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
           decoration: BoxDecoration(
             color: Colors.white,
             borderRadius: BorderRadius.circular(30),
@@ -1112,15 +1152,38 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                _toolNavButton(Icons.format_color_fill, 'BG', _pickBackgroundColor),
+                _toolNavButton(
+                    Icons.format_color_fill, 'BG', _pickBackgroundColor),
                 _toolNavButton(Icons.image, 'Image', _uploadImage),
+                /* _toolNavButton(Icons.face, 'Character', () async {
+                  final selected = await showCharacterPicker(context);
+                  if (selected != null) {
+                    _addCharacterAsset(selected); // You will implement this
+                  }
+                }),*/
+
+/*
                 _toolNavButton(Icons.insert_emoticon, 'Clipart', () async {
                   final result = await showCharacterAndClipartPicker(context);
                   if (result != null && result['type'] == 'character') {
                     _addCharacterEmoji(result['value']);
                   }
+                }),*/
+                _toolNavButton(Icons.face, 'Character', () async {
+                  final result = await showDialog<Map<String, dynamic>>(
+                    context: context,
+                    builder: (_) => CharacterClipartPickerDialog(),
+                  );
+                  if (result != null) {
+                    if (result['type'] == 'character') {
+                      _addCharacterAsset(result['value'] as String);
+                    } else if (result['type'] == 'clipart') {
+                      _addClipArtAsset(result['value'] as String);
+                    }
+                  }
                 }),
-                _toolNavButton(Icons.chat_bubble, 'Speech Bubble', _addSpeechBubble),
+                _toolNavButton(
+                    Icons.chat_bubble, 'Speech Bubble', _addSpeechBubble),
                 _toolNavButton(Icons.text_fields, 'Text', _addTextBox),
                 _toolNavButton(Icons.draw, 'Draw', () {
                   setState(() => isDrawing = true);
@@ -1133,7 +1196,6 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
       ),
     );
   }
-
 
   Widget _toolNavButton(IconData icon, String label, VoidCallback onTap) {
     return GestureDetector(
@@ -1151,12 +1213,6 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
       ),
     );
   }
-
-
-
-
-
-
 
   void _showDrawingToolsPanel() {
     showModalBottomSheet(
@@ -1291,7 +1347,20 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
     _addNewElement(newElement);
   }
 
-  void _addClipArt(IconData selectedIcon) {
+/*  void _addCharacterAsset(String imagePath) {
+    final characterElement = PanelElementModel(
+      id: DateTime.now().millisecondsSinceEpoch.toString(),
+      type: 'character',
+      value: imagePath,
+      offset: Offset(50, 50),
+      width: 100,
+      height: 100,
+      size: Size(100, 100),
+    );
+    _addNewElement(characterElement);
+  }*/
+
+  /*void _addClipArt(IconData selectedIcon) {
     final newElement = PanelElementModel(
       id: DateTime.now().millisecondsSinceEpoch.toString(),
       type: 'clipart',
@@ -1304,6 +1373,34 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
       color: Colors.black,
     );
     _addNewElement(newElement);
+  }*/
+  void _addCharacterAsset(String assetPath) {
+    final el = PanelElementModel(
+      id: DateTime.now().millisecondsSinceEpoch.toString(),
+      type: 'character',
+      // same type, but now value is a path
+      value: assetPath,
+      // <-- path to asset
+      offset: const Offset(50, 50),
+      width: 120,
+      height: 120,
+      size: const Size(120, 120),
+    );
+    _addNewElement(el);
+  }
+
+  void _addClipArtAsset(String assetPath) {
+    final el = PanelElementModel(
+      id: DateTime.now().millisecondsSinceEpoch.toString(),
+      type: 'clipart',
+      // distinguish if you want
+      value: assetPath,
+      offset: const Offset(50, 50),
+      width: 100,
+      height: 100,
+      size: const Size(100, 100),
+    );
+    _addNewElement(el);
   }
 
   void _addTextBox() async {
@@ -1412,13 +1509,47 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
     }
   }
 
-  Future<Map<String, dynamic>?> showCharacterAndClipartPicker(
+/*  Future<Map<String, dynamic>?> showCharacterAndClipartPicker(
       BuildContext context) async {
     return showDialog<Map<String, dynamic>>(
       context: context,
       builder: (context) {
         return CharacterClipartPickerDialog();
       },
+    );
+  }*/
+  Future<String?> showCharacterPicker(BuildContext context) async {
+    final characters = [
+      'assets/characters/ic_super_hero_1.png',
+      'assets/characters/ic_engineer.png',
+      'assets/characters/ic_super_hero.png',
+      'assets/characters/ic_women.png',
+      'assets/characters/ic_boy.png',
+    ];
+
+    return await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Choose a character'),
+        content: SizedBox(
+          width: 300,
+          height: 300,
+          child: GridView.builder(
+            itemCount: characters.length,
+            gridDelegate:
+                SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: 3),
+            itemBuilder: (context, index) {
+              return GestureDetector(
+                onTap: () => Navigator.pop(context, characters[index]),
+                child: Padding(
+                  padding: const EdgeInsets.all(4.0),
+                  child: Image.asset(characters[index]),
+                ),
+              );
+            },
+          ),
+        ),
+      ),
     );
   }
 
@@ -1461,7 +1592,8 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
     final boundingHeight = (maxY - minY).clamp(10.0, double.infinity);
 
     final normalizedPoints = points.map((p) => p - Offset(minX, minY)).toList();
-    final drawingData = normalizedPoints.map((e) => '${e.dx},${e.dy}').join(';');
+    final drawingData =
+        normalizedPoints.map((e) => '${e.dx},${e.dy}').join(';');
 
     final newElement = PanelElementModel(
       id: DateTime.now().millisecondsSinceEpoch.toString(),
@@ -1479,4 +1611,3 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
     setState(() => isDrawing = false);
   }
 }
-

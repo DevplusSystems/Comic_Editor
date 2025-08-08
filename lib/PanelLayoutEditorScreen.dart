@@ -361,6 +361,7 @@ class _PanelLayoutEditorScreenState extends State<PanelLayoutEditorScreen> {
         builder: (context) => PanelEditScreen(
           panel: panelForEditing,
           panelOffset: Offset(actualPanel.x, actualPanel.y),
+          panelSize: Size(actualPanel.width, actualPanel.height), // pass size
         ),
       ),
     );
