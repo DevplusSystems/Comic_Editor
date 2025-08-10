@@ -99,6 +99,12 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
     'sports_esports': Icons.sports_esports,
   };
 
+  // --- Clipboard & focus ---
+  PanelElementModel? _clipboard;
+  Offset? _lastTapLocal; // where the user clicked last on the canvas
+  final FocusNode _focusNode = FocusNode();
+
+
   @override
   void initState() {
     super.initState();
@@ -128,6 +134,10 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
         backgroundColor: Colors.blue.shade400,
         foregroundColor: Colors.white,
         actions: [
+
+          IconButton(icon: const Icon(Icons.copy), onPressed: _copySelected),
+          IconButton(icon: const Icon(Icons.content_paste), onPressed: _pasteElement),
+          
           IconButton(
             icon: const Icon(Icons.undo),
             onPressed: _isSaving
@@ -2075,4 +2085,93 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
       return const SizedBox.shrink();
     }
   }
+
+  void _copySelected() {
+    if (selectedElementIndex == null) return;
+    _clipboard = _deepCloneElement(currentElements[selectedElementIndex!]);
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Copied')),
+    );
+  }
+
+  void _cutSelected() {
+    if (selectedElementIndex == null) return;
+    _clipboard = _deepCloneElement(currentElements[selectedElementIndex!]);
+    _deleteSelected();
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Cut')),
+    );
+  }
+
+  void _pasteElement() {
+    if (_clipboard == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Clipboard is empty')),
+      );
+      return;
+    }
+
+    final src = _clipboard!;
+    final Offset base = _lastTapLocal ?? src.offset + const Offset(16, 16);
+    final Size canvas = widget.panelSize;
+
+    final pasted = _deepCloneElement(
+      src,
+      offsetOverride: _clampOffset(base, Size(src.width, src.height), canvas),
+    );
+
+    setState(() {
+      currentElements.add(pasted);
+      elementKeys.add(GlobalKey<ResizableDraggableState>());
+      selectedElementIndex = currentElements.length - 1;
+    });
+  }
+
+  void _duplicateSelected() {
+    if (selectedElementIndex == null) return;
+    // duplicate relative to the original with a slight offset
+    _clipboard = _deepCloneElement(currentElements[selectedElementIndex!]);
+    _lastTapLocal = currentElements[selectedElementIndex!].offset + const Offset(20, 20);
+    _pasteElement();
+  }
+
+  void _deleteSelected() {
+    if (selectedElementIndex == null) return;
+    final idx = selectedElementIndex!;
+    setState(() {
+      currentElements.removeAt(idx);
+      elementKeys.removeAt(idx);
+      selectedElementIndex = null;
+    });
+  }
+
+  // Ensure the element stays inside panel bounds
+  Offset _clampOffset(Offset desired, Size elSize, Size canvas) {
+    final dx = desired.dx.clamp(0.0, (canvas.width - elSize.width).clamp(0.0, double.infinity));
+    final dy = desired.dy.clamp(0.0, (canvas.height - elSize.height).clamp(0.0, double.infinity));
+    return Offset(dx, dy);
+  }
+
+// Deep-ish clone with a fresh id; keep meta/value etc.
+  PanelElementModel _deepCloneElement(PanelElementModel e, {Offset? offsetOverride}) {
+    final cloned = e.copyWith(
+      id: DateTime.now().millisecondsSinceEpoch.toString(),
+      offset: offsetOverride ?? (e.offset + const Offset(12, 12)),
+      // keep everything else the same:
+      size: Size(e.width, e.height),
+      width: e.width,
+      height: e.height,
+      // keep style bits & meta (important for speech_bubble re-edit)
+      value: e.value,
+      meta: e.meta,
+      color: e.color,
+      fontSize: e.fontSize,
+      fontFamily: e.fontFamily,
+      fontWeight: e.fontWeight,
+      fontStyle: e.fontStyle,
+    );
+    return cloned;
+  }
+
+
 }

@@ -78,40 +78,4 @@ class DragSpeechBubbleData {
       fontStyle: FontStyle.values[map['fontStyle'] ?? 0], // normal=0
     );
   }
-
-
 }
-extension DragSpeechBubbleDataCopy on DragSpeechBubbleData {
-  DragSpeechBubbleData copyWith({
-    String? text,
-    Color? bubbleColor,
-    Color? borderColor,
-    double? borderWidth,
-    DragBubbleShape? bubbleShape,
-    Offset? tailOffset,
-    Offset? tailNorm,
-    double? padding,
-    double? fontSize,
-    Color? textColor,
-    String? fontFamily,
-    FontWeight? fontWeight,
-    FontStyle? fontStyle,
-  }) {
-    return DragSpeechBubbleData(
-      text: text ?? this.text,
-      bubbleColor: bubbleColor ?? this.bubbleColor,
-      borderColor: borderColor ?? this.borderColor,
-      borderWidth: borderWidth ?? this.borderWidth,
-      bubbleShape: bubbleShape ?? this.bubbleShape,
-      tailOffset: tailOffset ?? this.tailOffset,
-      tailNorm: tailNorm ?? this.tailNorm,
-      padding: padding ?? this.padding,
-      fontSize: fontSize ?? this.fontSize,
-      textColor: textColor ?? this.textColor,
-      fontFamily: fontFamily ?? this.fontFamily,
-      fontWeight: fontWeight ?? this.fontWeight,
-      fontStyle: fontStyle ?? this.fontStyle,
-    );
-  }
-}
-

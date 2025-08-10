@@ -64,6 +64,10 @@ class _PanelLayoutEditorScreenState extends State<PanelLayoutEditorScreen> {
 
   bool _isResizing = false;
 
+  static const double _panelAspect = 3 / 4; // <-- adjust as needed
+  static const int _cols = 2;               // two panels per row
+  static const double _gap = 12.0;
+
   @override
   void initState() {
     super.initState();
@@ -206,7 +210,7 @@ class _PanelLayoutEditorScreenState extends State<PanelLayoutEditorScreen> {
                                             ],
                                           ),
                                         ),
-                                      /*  ...pages[_currentPage].map((panel) {
+                                        ...pages[_currentPage].map((panel) {
                                         return Positioned(
                                           left: panel.x * scaleX,
                                           top: panel.y * scaleY,
@@ -258,12 +262,12 @@ class _PanelLayoutEditorScreenState extends State<PanelLayoutEditorScreen> {
                                             ),
                                           ),
                                         );
-                                      }).toList(),*/
+                                      }).toList(),
 
-                                      ...pages[_currentPage]
+                                      /*...pages[_currentPage]
                                           .map((panel) => _buildPanelWithResize(
                                               panel, scaleX, scaleY))
-                                          .toList(),
+                                          .toList(),*/
                                     ],
                                   );
                                 },
