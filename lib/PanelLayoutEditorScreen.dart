@@ -17,6 +17,8 @@ import 'PanelModel/PanelElementModel.dart';
 import 'PanelModel/Project.dart';
 import 'PreviewPdf/AllPagesPreviewScreen.dart';
 
+enum AlignAlignment { topLeft, topRight, bottomLeft, bottomRight }
+
 class PanelLayoutEditorScreen extends StatefulWidget {
   final Project project;
 
@@ -52,6 +54,15 @@ class _PanelLayoutEditorScreenState extends State<PanelLayoutEditorScreen> {
   List<LayoutPanel> get currentPagePanels => currentProject.pages.isNotEmpty
       ? currentProject.pages[currentPageIndex]
       : [];
+
+  final double _minPanelSize = 40.0; // smaller min size
+
+  // 👉 Floating inspector bar state
+  bool _inspectorCollapsed = false;
+  double _inspectorTop = 140.0;
+  bool _lockAspect = false;
+
+  bool _isResizing = false;
 
   @override
   void initState() {
@@ -119,8 +130,7 @@ class _PanelLayoutEditorScreenState extends State<PanelLayoutEditorScreen> {
                       child: LayoutBuilder(
                         builder: (context, constraints) {
                           final scaleX = constraints.maxWidth / _canvasWidth;
-                          final scaleY =
-                              constraints.maxHeight / _canvasHeight;
+                          final scaleY = constraints.maxHeight / _canvasHeight;
                           return RepaintBoundary(
                             key: _canvasKey,
                             child: Container(
@@ -131,24 +141,23 @@ class _PanelLayoutEditorScreenState extends State<PanelLayoutEditorScreen> {
                                       ?.findRenderObject() as RenderBox?;
                                   if (box != null) {
                                     final offset =
-                                    box.globalToLocal(details.offset);
+                                        box.globalToLocal(details.offset);
                                     final incoming = details.data;
                                     final newPanel = LayoutPanel(
                                       id: incoming.id,
                                       width: incoming.width,
                                       height: incoming.height,
-                                      x: (offset.dx - incoming.width / 2)
-                                          .clamp(
+                                      x: (offset.dx - incoming.width / 2).clamp(
                                           _pageMargin,
                                           _canvasWidth -
                                               incoming.width -
                                               _pageMargin),
                                       y: (offset.dy - incoming.height / 2)
                                           .clamp(
-                                          _pageMargin,
-                                          _canvasHeight -
-                                              incoming.height -
-                                              _pageMargin),
+                                              _pageMargin,
+                                              _canvasHeight -
+                                                  incoming.height -
+                                                  _pageMargin),
                                       backgroundColor: Colors.white,
                                     );
                                     if (!_isOverlapping(newPanel)) {
@@ -177,7 +186,7 @@ class _PanelLayoutEditorScreenState extends State<PanelLayoutEditorScreen> {
                                         Center(
                                           child: Column(
                                             mainAxisAlignment:
-                                            MainAxisAlignment.center,
+                                                MainAxisAlignment.center,
                                             children: [
                                               Icon(Icons.description_outlined,
                                                   size: 64,
@@ -188,17 +197,16 @@ class _PanelLayoutEditorScreenState extends State<PanelLayoutEditorScreen> {
                                                       fontSize: 20,
                                                       color: Colors.grey[600],
                                                       fontWeight:
-                                                      FontWeight.bold)),
+                                                          FontWeight.bold)),
                                               const SizedBox(height: 8),
                                               Text(
                                                   'Add panels or choose a layout template',
                                                   style: TextStyle(
-                                                      color:
-                                                      Colors.grey[500])),
+                                                      color: Colors.grey[500])),
                                             ],
                                           ),
                                         ),
-                                      ...pages[_currentPage].map((panel) {
+                                      /*  ...pages[_currentPage].map((panel) {
                                         return Positioned(
                                           left: panel.x * scaleX,
                                           top: panel.y * scaleY,
@@ -250,7 +258,12 @@ class _PanelLayoutEditorScreenState extends State<PanelLayoutEditorScreen> {
                                             ),
                                           ),
                                         );
-                                      }).toList(),
+                                      }).toList(),*/
+
+                                      ...pages[_currentPage]
+                                          .map((panel) => _buildPanelWithResize(
+                                              panel, scaleX, scaleY))
+                                          .toList(),
                                     ],
                                   );
                                 },
@@ -312,18 +325,312 @@ class _PanelLayoutEditorScreenState extends State<PanelLayoutEditorScreen> {
               ),
             ),
 
+/*
             if (selectedPanel != null) _buildFloatingEditButton(),
+*/
+            // 👉 Right floating inspector (when a panel is selected)
+            if (selectedPanel != null)
+              _buildRightFloatingInspector(selectedPanel!),
           ],
         ),
       ),
     );
   }
 
+  // ---------- Floating Inspector (RIGHT) ----------
+  Widget _buildRightFloatingInspector(LayoutPanel panel) {
+    final double maxW = _canvasWidth - 2 * _pageMargin;
+    final double maxH = _canvasHeight - 2 * _pageMargin;
+    final theme = Theme.of(context);
+    final double aspect = panel.width > 0 ? (panel.height / panel.width) : 1.0;
+
+    return Positioned(
+      right: 16,
+      top: _inspectorTop,
+      child: GestureDetector(
+        onPanUpdate: (d) {
+          final screenH = MediaQuery.of(context).size.height;
+          setState(() {
+            _inspectorTop += d.delta.dy;
+            _inspectorTop = _inspectorTop.clamp(80.0, screenH - 260.0);
+          });
+        },
+        child: Material(
+          color: Colors.transparent,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 150),
+            width: 280,
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(14),
+              boxShadow: const [
+                BoxShadow(
+                    color: Colors.black26,
+                    blurRadius: 12,
+                    offset: Offset(0, 6)),
+              ],
+              border: Border.all(color: Colors.black12),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Header
+                Container(
+                  height: 44,
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  decoration: BoxDecoration(
+                    borderRadius:
+                        const BorderRadius.vertical(top: Radius.circular(14)),
+                    color: Colors.blue.shade50,
+                    border: const Border(
+                        bottom: BorderSide(color: Color(0x11000000))),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(Icons.drag_indicator,
+                          color: Colors.blue.shade400, size: 20),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          panel.id.isNotEmpty ? panel.id : 'Panel',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(fontWeight: FontWeight.w600),
+                        ),
+                      ),
+                      IconButton(
+                        tooltip: _inspectorCollapsed ? 'Expand' : 'Collapse',
+                        icon: Icon(_inspectorCollapsed
+                            ? Icons.unfold_more
+                            : Icons.unfold_less),
+                        onPressed: () => setState(
+                            () => _inspectorCollapsed = !_inspectorCollapsed),
+                      ),
+                    ],
+                  ),
+                ),
+
+                if (!_inspectorCollapsed) ...[
+                  // size + lock
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(12, 10, 12, 0),
+                    child: Row(
+                      children: [
+                        Text(
+                            'W: ${panel.width.toInt()}  H: ${panel.height.toInt()}',
+                            style: theme.textTheme.bodyMedium),
+                        const Spacer(),
+                        InkWell(
+                          borderRadius: BorderRadius.circular(8),
+                          onTap: () =>
+                              setState(() => _lockAspect = !_lockAspect),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 10, vertical: 6),
+                            decoration: BoxDecoration(
+                              color: _lockAspect
+                                  ? Colors.blue.shade50
+                                  : Colors.grey.shade100,
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(
+                                color:
+                                    _lockAspect ? Colors.blue : Colors.black12,
+                              ),
+                            ),
+                            child: Row(
+                              children: [
+                                Icon(_lockAspect ? Icons.lock : Icons.lock_open,
+                                    size: 16,
+                                    color: _lockAspect
+                                        ? Colors.blue
+                                        : Colors.black54),
+                                const SizedBox(width: 6),
+                                Text(
+                                  'Lock',
+                                  style: TextStyle(
+                                    color: _lockAspect
+                                        ? Colors.blue
+                                        : Colors.black87,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  // Width slider
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+                    child: Row(
+                      children: const [
+                        Icon(Icons.swap_horiz, size: 18),
+                        SizedBox(width: 8),
+                        Text('Width',
+                            style: TextStyle(fontWeight: FontWeight.w600)),
+                      ],
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    child: Slider(
+                      min: _minPanelSize,
+                      max: maxW,
+                      value: panel.width.clamp(_minPanelSize, maxW),
+                      onChanged: (v) {
+                        double newW = v;
+                        double newH =
+                            _lockAspect ? (newW * aspect) : panel.height;
+                        newH = newH.clamp(_minPanelSize, maxH);
+
+                        double newX = panel.x.clamp(
+                            _pageMargin, _canvasWidth - newW - _pageMargin);
+                        double newY = panel.y.clamp(
+                            _pageMargin, _canvasHeight - newH - _pageMargin);
+
+                        _applyResize(panel,
+                            x: newX, y: newY, width: newW, height: newH);
+                      },
+                    ),
+                  ),
+
+                  // Height slider
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(12, 0, 12, 0),
+                    child: Row(
+                      children: const [
+                        Icon(Icons.swap_vert, size: 18),
+                        SizedBox(width: 8),
+                        Text('Height',
+                            style: TextStyle(fontWeight: FontWeight.w600)),
+                      ],
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    child: Slider(
+                      min: _minPanelSize,
+                      max: maxH,
+                      value: panel.height.clamp(_minPanelSize, maxH),
+                      onChanged: (v) {
+                        double newH = v;
+                        double newW =
+                            _lockAspect ? (newH / aspect) : panel.width;
+                        newW = newW.clamp(_minPanelSize, maxW);
+
+                        double newY = panel.y.clamp(
+                            _pageMargin, _canvasHeight - newH - _pageMargin);
+                        double newX = panel.x.clamp(
+                            _pageMargin, _canvasWidth - newW - _pageMargin);
+
+                        _applyResize(panel,
+                            x: newX, y: newY, width: newW, height: newH);
+                      },
+                    ),
+                  ),
+
+                  // Presets
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(12, 4, 12, 12),
+                    child: Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        _presetChip('½ width', () {
+                          final targetW = ((_canvasWidth - 3 * _pageMargin) / 2)
+                              .clamp(_minPanelSize, maxW);
+                          _applyResize(panel, width: targetW);
+                        }),
+                        _presetChip('⅓ width', () {
+                          final targetW = ((_canvasWidth - 4 * _pageMargin) / 3)
+                              .clamp(_minPanelSize, maxW);
+                          _applyResize(panel, width: targetW);
+                        }),
+                        _presetChip('Square', () {
+                          final side = min(maxW, maxH)
+                              .clamp(_minPanelSize, double.infinity);
+                          _applyResize(panel, width: side, height: side);
+                        }),
+                        _presetChip('Fit width', () {
+                          final targetW = (_canvasWidth - 2 * _pageMargin)
+                              .clamp(_minPanelSize, maxW);
+                          _applyResize(panel, width: targetW);
+                        }),
+                        _presetChip('Fit height', () {
+                          final targetH = (_canvasHeight - 2 * _pageMargin)
+                              .clamp(_minPanelSize, maxH);
+                          _applyResize(panel, height: targetH);
+                        }),
+                      ],
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _presetChip(String label, VoidCallback onTap) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(20),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          color: Colors.grey.shade100,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: Colors.black12),
+        ),
+        child: Text(label, style: const TextStyle(fontWeight: FontWeight.w600)),
+      ),
+    );
+  }
+
+  /// Centralized resize apply with clamp + overlap check
+  void _applyResize(
+    LayoutPanel panel, {
+    double? x,
+    double? y,
+    double? width,
+    double? height,
+  }) {
+    final double maxW = _canvasWidth - 2 * _pageMargin;
+    final double maxH = _canvasHeight - 2 * _pageMargin;
+
+    double newW = (width ?? panel.width).clamp(_minPanelSize, maxW);
+    double newH = (height ?? panel.height).clamp(_minPanelSize, maxH);
+
+    double newX =
+        (x ?? panel.x).clamp(_pageMargin, _canvasWidth - newW - _pageMargin);
+    double newY =
+        (y ?? panel.y).clamp(_pageMargin, _canvasHeight - newH - _pageMargin);
+
+    final resized = panel.copyWith(x: newX, y: newY, width: newW, height: newH);
+    if (!_isOverlapping(resized, excludePanel: panel)) {
+      setState(() {
+        final idx = pages[_currentPage].indexWhere((p) => p.id == panel.id);
+        if (idx != -1) {
+          pages[_currentPage][idx] = resized;
+          if (selectedPanel?.id == panel.id) selectedPanel = resized;
+        }
+      });
+    }
+  }
+
   void _addPage() {
     setState(() {
-      final newPage = [
+      /*final newPage = [
         LayoutPanel(
-          id: DateTime.now().millisecondsSinceEpoch.toString(),
+          id: DateTime
+              .now()
+              .millisecondsSinceEpoch
+              .toString(),
           width: _canvasWidth * 0.3,
           height: _canvasHeight * 0.2,
           x: _pageMargin,
@@ -331,7 +638,9 @@ class _PanelLayoutEditorScreenState extends State<PanelLayoutEditorScreen> {
           customText: 'Page ${currentProject.pages.length + 1} Panel',
           backgroundColor: Colors.white,
         ),
-      ];
+      ];*/
+      final newPage = <LayoutPanel>[];
+
       currentProject = currentProject.copyWith(
         pages: [...currentProject.pages, newPage],
         lastModified: DateTime.now(),
@@ -1169,7 +1478,7 @@ class _PanelLayoutEditorScreenState extends State<PanelLayoutEditorScreen> {
           ),
         ],
       ),
-      padding: EdgeInsets.symmetric(horizontal: 10,vertical: 5),
+      padding: EdgeInsets.symmetric(horizontal: 10, vertical: 5),
       child: Row(
         children: [
           IconButton(
@@ -1562,7 +1871,6 @@ class _PanelLayoutEditorScreenState extends State<PanelLayoutEditorScreen> {
         },
         child: Stack(
           children: [
-            // 🔷 DRAWER PANEL
             Material(
               elevation: 6,
               borderRadius: BorderRadius.only(
@@ -1632,17 +1940,212 @@ class _PanelLayoutEditorScreenState extends State<PanelLayoutEditorScreen> {
     );
   }
 
-/*Future<Uint8List> generatePdf() async {
-    final pdf = pw.Document();
+  // ======= Your existing panel builder with edge handles (unchanged except inspector stays) =======
+  Widget _buildPanelWithResize(
+      LayoutPanel panel, double scaleX, double scaleY) {
+    final viewScale = min(scaleX, scaleY);
 
-    pdf.addPage(
-      pw.Page(
-        build: (pw.Context context) => pw.Center(
-          child: pw.Text("Hello PDF!", style: pw.TextStyle(fontSize: 40)),
+    return Positioned(
+      left: panel.x * scaleX,
+      top: panel.y * scaleY,
+      child: GestureDetector(
+        onTap: () {
+          setState(() {
+            selectedPanel = (selectedPanel?.id == panel.id)
+                ? null
+                : pages[_currentPage].firstWhere((p) => p.id == panel.id);
+          });
+        },
+        onPanUpdate: (details) {
+          double newX = panel.x + (details.delta.dx / scaleX);
+          double newY = panel.y + (details.delta.dy / scaleY);
+
+          if (_snapToGrid) {
+            newX = (newX / 20).round() * 20.0;
+            newY = (newY / 20).round() * 20.0;
+          }
+
+          newX =
+              newX.clamp(_pageMargin, _canvasWidth - panel.width - _pageMargin);
+          newY = newY.clamp(
+              _pageMargin, _canvasHeight - panel.height - _pageMargin);
+
+          final moved = panel.copyWith(x: newX, y: newY);
+          if (!_isOverlapping(moved, excludePanel: panel)) {
+            setState(() {
+              final idx =
+                  pages[_currentPage].indexWhere((p) => p.id == panel.id);
+              if (idx != -1) {
+                pages[_currentPage][idx] = moved;
+                if (selectedPanel?.id == panel.id) selectedPanel = moved;
+              }
+            });
+          }
+        },
+        child: Transform.scale(
+          scale: viewScale,
+          alignment: Alignment.topLeft,
+          child: Stack(
+            clipBehavior: Clip.none,
+            children: [
+              Container(
+                width: panel.width,
+                height: panel.height,
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                    color: (selectedPanel?.id == panel.id)
+                        ? Colors.blue
+                        : Colors.grey.withOpacity(0.3),
+                    width: (selectedPanel?.id == panel.id) ? 2 : 1,
+                  ),
+                  boxShadow: const [
+                    BoxShadow(
+                        color: Colors.black26,
+                        blurRadius: 3,
+                        offset: Offset(0, 1))
+                  ],
+                ),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(10),
+                  child: panel.previewImage != null
+                      ? Image.memory(panel.previewImage!, fit: BoxFit.cover)
+                      : _buildLivePanelContent(panel),
+                ),
+              ),
+              if (selectedPanel?.id == panel.id) ...[
+                _edgeHandle(panel, viewScale, Axis.horizontal, isStart: true),
+                _edgeHandle(panel, viewScale, Axis.horizontal, isStart: false),
+                _edgeHandle(panel, viewScale, Axis.vertical, isStart: true),
+                _edgeHandle(panel, viewScale, Axis.vertical, isStart: false),
+              ],
+            ],
+          ),
         ),
       ),
     );
+  }
 
-    return pdf.save();
-  }*/
+  Widget _panelSizeControls(LayoutPanel panel, double viewScale) {
+    /* not used now */ return const SizedBox.shrink();
+  }
+
+  Widget _edgeHandle(
+    LayoutPanel panel,
+    double viewScale,
+    Axis axis, {
+    required bool isStart,
+  }) {
+    const double barThickness = 6.0;
+    const double hitThickness = 56.0;
+    const double inset = 6.0;
+
+    if (axis == Axis.horizontal) {
+      return Positioned(
+        left: isStart ? -hitThickness / 2 : panel.width - hitThickness / 2,
+        top: 0,
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onPanUpdate: (details) {
+            final dx = details.delta.dx / viewScale;
+            double newX = panel.x, newW = panel.width;
+
+            if (isStart) {
+              newX = panel.x + dx;
+              newW = panel.width - dx;
+            } else {
+              newW = panel.width + dx;
+            }
+
+            newW = max(newW, _minPanelSize);
+            newX = newX.clamp(_pageMargin, _canvasWidth - newW - _pageMargin);
+
+            if (_snapToGrid) {
+              newX = (newX / 20).round() * 20.0;
+              newW = (newW / 20).round() * 20.0;
+            }
+
+            final resized = panel.copyWith(x: newX, width: newW);
+            if (!_isOverlapping(resized, excludePanel: panel)) {
+              setState(() {
+                final idx =
+                    pages[_currentPage].indexWhere((p) => p.id == panel.id);
+                if (idx != -1) {
+                  pages[_currentPage][idx] = resized;
+                  if (selectedPanel?.id == panel.id) selectedPanel = resized;
+                }
+              });
+            }
+          },
+          child: SizedBox(
+            width: hitThickness,
+            height: panel.height,
+            child: Center(
+              child: Container(
+                width: barThickness,
+                height: panel.height - inset * 2,
+                /*decoration: BoxDecoration(
+                  color: Colors.blue.withOpacity(0.6),
+                  borderRadius: BorderRadius.circular(3),
+                ),*/
+              ),
+            ),
+          ),
+        ),
+      );
+    } else {
+      return Positioned(
+        top: isStart ? -hitThickness / 2 : panel.height - hitThickness / 2,
+        left: 0,
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onPanUpdate: (details) {
+            final dy = details.delta.dy / viewScale;
+            double newY = panel.y, newH = panel.height;
+
+            if (isStart) {
+              newY = panel.y + dy;
+              newH = panel.height - dy;
+            } else {
+              newH = panel.height + dy;
+            }
+
+            newH = max(newH, _minPanelSize);
+            newY = newY.clamp(_pageMargin, _canvasHeight - newH - _pageMargin);
+
+            if (_snapToGrid) {
+              newY = (newY / 20).round() * 20.0;
+              newH = (newH / 20).round() * 20.0;
+            }
+
+            final resized = panel.copyWith(y: newY, height: newH);
+            if (!_isOverlapping(resized, excludePanel: panel)) {
+              setState(() {
+                final idx =
+                    pages[_currentPage].indexWhere((p) => p.id == panel.id);
+                if (idx != -1) {
+                  pages[_currentPage][idx] = resized;
+                  if (selectedPanel?.id == panel.id) selectedPanel = resized;
+                }
+              });
+            }
+          },
+          // child: SizedBox(
+          //   width: panel.width,
+          //   height: hitThickness,
+          //   child: Center(
+          //     child: Container(
+          //       height: barThickness,
+          //       width: panel.width - inset * 2,
+          //       decoration: BoxDecoration(
+          //         color: Colors.blue.withOpacity(0.6),
+          //         borderRadius: BorderRadius.circular(3),
+          //       ),
+          //     ),
+          //   ),
+          // ),
+        ),
+      );
+    }
+  }
 }

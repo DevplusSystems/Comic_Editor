@@ -22,6 +22,7 @@ import 'Resizeable/ResizableDraggable.dart';
 import 'package:flutter/services.dart';
 import 'SpeechDrag/DragSpeechBubbleComponents.dart';
 import 'SpeechDrag/DragSpeechBubbleData.dart';
+import 'SpeechDrag/SpeechBubblePainterWithText.dart';
 import 'TextEditorDialog/TextEditDialog.dart';
 
 class PanelEditScreen extends StatefulWidget {
@@ -121,7 +122,7 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
     final h = widget.panelSize.height;
 
     return Scaffold(
-      backgroundColor: Colors.white,
+      // backgroundColor: Colors.white,
       appBar: AppBar(
         title: const Text('Edit Panel'),
         backgroundColor: Colors.blue.shade400,
@@ -177,18 +178,21 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
         ],
       ),
       body: Stack(
-        clipBehavior: Clip.hardEdge, // ⬅️ keep visuals inside the panel
+        clipBehavior: Clip.hardEdge, //   keep visuals inside the panel
         children: [
           Column(
             children: [
               // Panel Canvas Area
+/*
               Expanded(
                 child: Center(
                   // ensures it's centered if there's padding/margin
                   child: AspectRatio(
+*/
 /*
                     aspectRatio: aspectRatio,
-*/
+*/ /*
+
                     aspectRatio: w / h, // lock aspect
                     // or 4 / 3 or any other fixed ratio
                     child: RepaintBoundary(
@@ -198,7 +202,7 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
                         height: h,
                         color: _selectedBackgroundColor,
                         child: Stack(
-                          clipBehavior: Clip.hardEdge, // ⬅️ keep visuals inside the panel
+                          clipBehavior: Clip.hardEdge, // keep visuals inside the panel
                           children: [
                             if (_isEditing)
                               CustomPaint(
@@ -232,6 +236,63 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
                   ),
                 ),
               ),
+*/
+              Expanded(
+                child: Center(
+                  child: AspectRatio(
+                    aspectRatio: w / h, // keep panel aspect
+                    child: Container(
+                      // 🔹 Visual chrome (NOT exported)
+                      margin: const EdgeInsets.symmetric(
+                          horizontal: 16, vertical: 10),
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(20),
+                        child: RepaintBoundary(
+                          key: _panelContentKey, //
+                          child: Container(
+                            color: _selectedBackgroundColor,
+                            child: Stack(
+                              clipBehavior: Clip.hardEdge,
+                              // keep content within panel
+                              children: [
+                                if (_isEditing)
+                                  CustomPaint(
+                                    size: Size.infinite,
+                                    painter: GridPainter(),
+                                  ),
+                                if (isDrawing)
+                                  Positioned.fill(
+                                    child: DrawingCanvas(
+                                      tool: currentTool,
+                                      brushSize: selectedBrushSize,
+                                      color: drawSelectedColor,
+                                      onDrawingComplete: _onDrawingComplete,
+                                    ),
+                                  ),
+                                for (int i = 0; i < currentElements.length; i++)
+                                  _buildElementWidget(currentElements[i], i),
+                                if (currentElements.isEmpty)
+                                  const Center(
+                                    child: Text(
+                                      'No elements added yet.\nUse the tools below to add content.',
+                                      textAlign: TextAlign.center,
+                                      style: TextStyle(
+                                          fontSize: 16, color: Colors.grey),
+                                    ),
+                                  ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+
               // Footer toolbar
               _buildToolOptions(),
             ],
@@ -339,7 +400,7 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
         );
         break;
 
-      case 'speech_bubble':
+      /* case 'speech_bubble':
         final isSelected = selectedElementIndex == index;
         final decoratedChild = Container(
           decoration: BoxDecoration(
@@ -392,7 +453,67 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
               child: _buildSpeechBubble(element),
             ),
           );
+        }*/
+
+      // In your element switch:
+      case 'speech_bubble':
+        {
+          final isSelected = selectedElementIndex == index;
+          final child = _buildImageElement(element);
+
+          final decorated = Container(
+            decoration: BoxDecoration(
+              border:
+                  isSelected ? Border.all(color: Colors.blue, width: 2) : null,
+            ),
+            child: child,
+          );
+
+          if (_isEditing) {
+            return ResizableDraggable(
+              key: elementKeys[index],
+              isSelected: isSelected,
+              size: Size(element.width, element.height),
+              initialTop: element.offset.dy,
+              initialLeft: element.offset.dx,
+              minWidth: 10,
+              minHeight: 10,
+              onPositionChanged: (pos, size) {
+                if (!mounted) return;
+                setState(() {
+                  currentElements[index] = currentElements[index].copyWith(
+                    offset: pos,
+                    size: size,
+                    width: size.width,
+                    height: size.height,
+                  );
+                });
+              },
+              child: GestureDetector(
+                onTap: () {
+                  setState(() {
+                    selectedElementIndex = isSelected ? null : index;
+                  });
+                },
+                onDoubleTap: () {
+                  _editElement(index); // Optional: reopen dialog using meta
+                },
+                child: decorated,
+              ),
+            );
+          } else {
+            return Positioned(
+              top: element.offset.dy,
+              left: element.offset.dx,
+              child: SizedBox(
+                width: element.width,
+                height: element.height,
+                child: child,
+              ),
+            );
+          }
         }
+
       case 'image':
         child = Container(
           width: element.width,
@@ -973,6 +1094,279 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
     }
   }
 
+
+/*
+  void _editSpeechBubble(int index) async {
+    final element = currentElements[index];
+
+    // Try parsing existing bubble data from element.value
+    final Map<String, dynamic> initialData = _parseBubbleData(element);
+
+    final result = await showDialog<Map<String, dynamic>>(
+      context: context,
+      builder: (context) => DragSpeechBubbleEditDialog(
+        initialData: initialData,
+      ),
+    );
+
+    if (result != null) {
+
+      final updatedBubble = DragSpeechBubbleData(
+        text: result['text'],
+        bubbleColor: result['bubbleColor'],
+        borderColor: result['borderColor'],
+        borderWidth: result['borderWidth'],
+        bubbleShape: result['bubbleShape'],
+        tailOffset: result['tailOffset'],
+        fontSize: result['fontSize'],
+        textColor: result['textColor'],
+        fontFamily: result['fontFamily'],
+        fontWeight: result['fontWeight'],
+        fontStyle: result['fontStyle'],
+        padding: result['padding'],
+      );
+      setState(() {
+        currentElements[index] = element.copyWith(
+          value: jsonEncode(updatedBubble.toMap()),
+          color: updatedBubble.bubbleColor,
+          fontSize: updatedBubble.fontSize,
+          fontFamily: updatedBubble.fontFamily,
+          fontWeight: updatedBubble.fontWeight,
+          fontStyle: updatedBubble.fontStyle,
+          width: result['width'],
+          height: result['height'],
+          size: Size(result['width'], result['height']),
+        );
+      });
+
+    }
+  }
+*/
+
+  /// ===== Edit flow: open dialog with original vector data and save new PNG + vector =====
+  Future<void> _editSpeechBubble(int index) async {
+    final element = currentElements[index];
+
+    // 1) Prefill the editor with the ORIGINAL vector data saved in meta
+    final initialData = _extractBubbleInitialData(element);
+
+    // 2) Open your editor; it should return fresh pngBytes + updated vector fields
+    final result = await showDialog<Map<String, dynamic>>(
+      context: context,
+      builder: (context) => DragSpeechBubbleEditDialog(
+        initialData: initialData,
+      ),
+    );
+
+    if (result == null) return;
+
+    // 3) Build updated vector model from dialog result
+    final updatedBubble = DragSpeechBubbleData(
+      text: result['text'],
+      bubbleColor: result['bubbleColor'],
+      borderColor: result['borderColor'],
+      borderWidth: (result['borderWidth'] as num).toDouble(),
+      bubbleShape: result['bubbleShape'] as DragBubbleShape,
+      fontSize: (result['fontSize'] as num).toDouble(),
+      textColor: result['textColor'] as Color,
+      fontFamily: result['fontFamily'] as String,
+      fontWeight: result['fontWeight'] as FontWeight,
+      fontStyle: result['fontStyle'] as FontStyle,
+      padding: (result['padding'] as num).toDouble(),
+      tailOffset: result['tailOffset'] as Offset,
+      // ✅ keep normalized tail for future size changes / re-edits
+      tailNorm: Offset(
+        (result['tailNorm']['dx'] as num).toDouble(),
+        (result['tailNorm']['dy'] as num).toDouble(),
+      ),
+    );
+
+    // 4) Read the fresh rendered image + size from dialog
+    final Uint8List pngBytes = result['pngBytes'] as Uint8List;
+    final double newW = (result['width'] as num).toDouble();
+    final double newH = (result['height'] as num).toDouble();
+
+    // 5) Commit changes:
+    //    - value: PNG (base64)
+    //    - meta: original vector data (for future edits)
+    //    - width/height/size: from the renderer
+    //    - offset: keep existing position on the page
+    setState(() {
+      currentElements[index] = element.copyWith(
+        value: base64Encode(pngBytes),
+        // ✅ bitmap goes into value
+        width: newW,
+        height: newH,
+        size: Size(newW, newH),
+        offset: element.offset,
+        // keep position
+        // optional: expose some style fields for searches/filters
+        color: updatedBubble.bubbleColor,
+        fontSize: updatedBubble.fontSize,
+        fontFamily: updatedBubble.fontFamily,
+        fontWeight: updatedBubble.fontWeight,
+        fontStyle: updatedBubble.fontStyle,
+        // ✅ keep the original data for re-edit
+        meta: jsonEncode({
+          'kind': 'speech_bubble_original',
+          'data': updatedBubble.toMap(),
+        }),
+      );
+    });
+  }
+
+  /// ===== Helper: extract initial data for the editor from the element.meta =====
+  Map<String, dynamic> _extractBubbleInitialData(PanelElementModel element) {
+    // Default fallback if meta is missing/corrupt
+    Map<String, dynamic> fallback = {
+      'text': 'Hello!',
+      'bubbleColor': Colors.white,
+      'borderColor': Colors.black,
+      'borderWidth': 2.0,
+      'bubbleShape': DragBubbleShape.rectangle,
+      'tailOffset': Offset(element.width * 0.5, element.height * 0.85),
+      'tailNorm': {'dx': 0.5, 'dy': 0.9},
+      'fontSize': 16.0,
+      'textColor': Colors.black,
+      'fontFamily': 'Roboto',
+      'fontWeight': FontWeight.normal,
+      'fontStyle': FontStyle.normal,
+      'padding': 12.0,
+      // optional hints for the dialog if it uses them
+      'width': element.width,
+      'height': element.height,
+    };
+
+    try {
+      if (element.meta == null || element.meta!.isEmpty) return fallback;
+
+      final metaObj = jsonDecode(element.meta!);
+      if (metaObj is! Map) return fallback;
+
+      if (metaObj['kind'] == 'speech_bubble_original' &&
+          metaObj['data'] != null) {
+        final dataMap = Map<String, dynamic>.from(metaObj['data'] as Map);
+        return {
+          'text': dataMap['text'],
+          'bubbleColor':
+              _readColor(dataMap['bubbleColor'], fallback['bubbleColor']),
+          'borderColor':
+              _readColor(dataMap['borderColor'], fallback['borderColor']),
+          'borderWidth': (dataMap['borderWidth'] as num?)?.toDouble() ??
+              fallback['borderWidth'],
+          'bubbleShape': _readBubbleShape(dataMap['bubbleShape']) ??
+              fallback['bubbleShape'],
+          'tailOffset':
+              _readOffset(dataMap['tailOffset']) ?? fallback['tailOffset'],
+          'tailNorm':
+              _readTailNorm(dataMap['tailNorm']) ?? fallback['tailNorm'],
+          'fontSize':
+              (dataMap['fontSize'] as num?)?.toDouble() ?? fallback['fontSize'],
+          'textColor': _readColor(dataMap['textColor'], fallback['textColor']),
+          'fontFamily': dataMap['fontFamily'] ?? fallback['fontFamily'],
+          'fontWeight':
+              _readFontWeight(dataMap['fontWeight']) ?? fallback['fontWeight'],
+          'fontStyle':
+              _readFontStyle(dataMap['fontStyle']) ?? fallback['fontStyle'],
+          'padding':
+              (dataMap['padding'] as num?)?.toDouble() ?? fallback['padding'],
+          'width': element.width,
+          'height': element.height,
+        };
+      }
+    } catch (_) {
+      // fall through to fallback
+    }
+
+    return fallback;
+  }
+
+// --- small readers to keep parsing robust ---
+
+  Color _readColor(dynamic v, Color fallback) {
+    if (v is int) return Color(v);
+    if (v is Color) return v;
+    return fallback;
+  }
+
+  Offset? _readOffset(dynamic v) {
+    if (v is Offset) return v;
+    if (v is Map) {
+      final dx = (v['dx'] as num?)?.toDouble();
+      final dy = (v['dy'] as num?)?.toDouble();
+      if (dx != null && dy != null) return Offset(dx, dy);
+    }
+    return null;
+  }
+
+  Map<String, double>? _readTailNorm(dynamic v) {
+    if (v is Map) {
+      final dx = (v['dx'] as num?)?.toDouble();
+      final dy = (v['dy'] as num?)?.toDouble();
+      if (dx != null && dy != null) return {'dx': dx, 'dy': dy};
+    }
+    return null;
+  }
+
+  DragBubbleShape? _readBubbleShape(dynamic v) {
+    if (v is DragBubbleShape) return v;
+    if (v is String) {
+      // adjust if you serialize enums as strings
+      switch (v) {
+        case 'rectangle':
+          return DragBubbleShape.rectangle;
+        case 'shout':
+          return DragBubbleShape.shout;
+      }
+    }
+    return null;
+  }
+
+  FontWeight? _readFontWeight(dynamic v) {
+    if (v is FontWeight) return v;
+    if (v is String) {
+      switch (v) {
+        case 'w100':
+          return FontWeight.w100;
+        case 'w200':
+          return FontWeight.w200;
+        case 'w300':
+          return FontWeight.w300;
+        case 'w400':
+          return FontWeight.w400;
+        case 'w500':
+          return FontWeight.w500;
+        case 'w600':
+          return FontWeight.w600;
+        case 'w700':
+          return FontWeight.w700;
+        case 'w800':
+          return FontWeight.w800;
+        case 'w900':
+          return FontWeight.w900;
+        case 'normal':
+          return FontWeight.normal;
+        case 'bold':
+          return FontWeight.bold;
+      }
+    }
+    return null;
+  }
+
+  FontStyle? _readFontStyle(dynamic v) {
+    if (v is FontStyle) return v;
+    if (v is String) {
+      switch (v) {
+        case 'normal':
+          return FontStyle.normal;
+        case 'italic':
+          return FontStyle.italic;
+      }
+    }
+    return null;
+  }
+
+/*
   void _editSpeechBubble(int index) async {
     final element = currentElements[index];
 
@@ -1016,6 +1410,7 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
       });
     }
   }
+*/
 
   void _editTextElement(int index) async {
     final element = currentElements[index];
@@ -1053,7 +1448,73 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
     });
   }
 
-  void _addSpeechBubble() async {
+  Future<void> _addSpeechBubble() async {
+    final result = await showDialog<Map<String, dynamic>>(
+      context: context,
+      builder: (context) => DragSpeechBubbleEditDialog(
+        initialData: {
+          'text': 'Hello!',
+          'bubbleColor': Colors.white,
+          'borderColor': Colors.black,
+          'borderWidth': 2.0,
+          'bubbleShape': DragBubbleShape.rectangle,
+          'tailOffset': const Offset(140, 120),
+          'fontSize': 16.0,
+          'textColor': Colors.black,
+          'fontFamily': 'Roboto',
+          'fontWeight': FontWeight.normal,
+          'fontStyle': FontStyle.normal,
+          'padding': 12.0,
+        },
+      ),
+    );
+
+    if (result == null) return;
+
+    final bytes = result['pngBytes'] as Uint8List;
+    final width = (result['width'] as num).toDouble();
+    final height = (result['height'] as num).toDouble();
+
+    final bubbleData = DragSpeechBubbleData(
+      text: result['text'],
+      bubbleColor: result['bubbleColor'],
+      borderColor: result['borderColor'],
+      borderWidth: (result['borderWidth'] as num).toDouble(),
+      bubbleShape: result['bubbleShape'] as DragBubbleShape,
+      fontSize: (result['fontSize'] as num).toDouble(),
+      textColor: result['textColor'] as Color,
+      fontFamily: result['fontFamily'] as String,
+      fontWeight: result['fontWeight'] as FontWeight,
+      fontStyle: result['fontStyle'] as FontStyle,
+      padding: (result['padding'] as num).toDouble(),
+      tailOffset: result['tailOffset'] as Offset,
+      tailNorm: Offset(
+        (result['tailNorm']['dx'] as num).toDouble(),
+        (result['tailNorm']['dy'] as num).toDouble(),
+      ),
+    );
+
+    final newElement = PanelElementModel(
+      id: DateTime.now().millisecondsSinceEpoch.toString(),
+      type: 'speech_bubble',
+      // IMPORTANT: it's now a bitmap
+      value: base64Encode(bytes),
+      // or save to file and store a path
+      offset: const Offset(50, 50),
+      width: width,
+      height: height,
+      size: Size(width, height),
+      // Keep original vector data for re-edit
+      meta: jsonEncode({
+        'kind': 'speech_bubble_original',
+        'data': bubbleData.toMap(),
+      }),
+    );
+
+    _addNewElement(newElement);
+  }
+
+/*  void _addSpeechBubble() async {
     final result = await showDialog<Map<String, dynamic>>(
       context: context,
       builder: (context) => DragSpeechBubbleEditDialog(
@@ -1089,16 +1550,6 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
           padding: result['padding'],
           tailOffset: result['tailOffset']);
 
-      final textSize = _calculateTextSize(
-        bubble.text,
-        bubble.fontSize,
-        bubble.fontWeight,
-        bubble.fontStyle,
-        bubble.fontFamily,
-      );
-
-      final bubblePadding = bubble.padding;
-
       final newElement = PanelElementModel(
         id: DateTime.now().millisecondsSinceEpoch.toString(),
         type: 'speech_bubble',
@@ -1111,7 +1562,7 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
 
       _addNewElement(newElement);
     }
-  }
+  }*/
 
   Future<Uint8List?> _capturePanelAsImage() async {
     try {
@@ -1609,5 +2060,19 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
 
     _addNewElement(newElement);
     setState(() => isDrawing = false);
+  }
+
+  Widget _buildImageElement(PanelElementModel element) {
+    try {
+      final bytes = base64Decode(element.value);
+      return Image.memory(
+        bytes,
+        fit: BoxFit.contain,
+        filterQuality: FilterQuality.high,
+        gaplessPlayback: true,
+      );
+    } catch (_) {
+      return const SizedBox.shrink();
+    }
   }
 }

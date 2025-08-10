@@ -45,8 +45,8 @@ class Project {
 class LayoutPanel {
   final String id;
   final String? label;
-  final double width;
-  final double height;
+  double width;
+  double height;
   double x;
   double y;
   String? customText;
@@ -56,7 +56,7 @@ class LayoutPanel {
 
   LayoutPanel({
     required this.id,
-    this.label= null,
+    this.label = null,
     required this.width,
     required this.height,
     this.x = 0,
@@ -87,7 +87,8 @@ class LayoutPanel {
       x: x ?? this.x,
       y: y ?? this.y,
       customText: customText ?? this.customText,
-      elements: elements ?? List<PanelElementModel>.from(this.elements), // Deep copy
+      elements: elements ?? List<PanelElementModel>.from(this.elements),
+      // Deep copy
       backgroundColor: backgroundColor ?? this.backgroundColor,
       previewImage: previewImage ?? this.previewImage,
     );

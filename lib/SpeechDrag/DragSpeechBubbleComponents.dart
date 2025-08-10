@@ -147,7 +147,8 @@ class DragSpeechBubblePainter extends CustomPainter {
       double left,
       double top,
       double right,
-      double bottom) {
+      double bottom)
+  {
     if (dTop <= dBottom && dTop <= dLeft && dTop <= dRight) {
       // Tail on top edge
       final cx = tailOffset.dx

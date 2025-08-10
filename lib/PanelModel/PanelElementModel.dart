@@ -7,7 +7,7 @@ import '../SpeechDrag/DragSpeechBubbleData.dart';
 class PanelElementModel {
   final String id;
   final String type; // e.g., "text", "draw", "speech_bubble"
-  final String value; // for speech bubble: JSON-encoded SpeechBubbleData
+  final String value; // e.g., JSON-encoded SpeechBubbleData or base64 PNG
   final double width;
   final double height;
   final Offset offset;
@@ -18,6 +18,7 @@ class PanelElementModel {
   final bool locked;
   final FontWeight? fontWeight;
   final FontStyle? fontStyle;
+  final String? meta; // <-- NEW: stores extra data like original bubble config
 
   const PanelElementModel({
     required this.id,
@@ -33,6 +34,7 @@ class PanelElementModel {
     this.locked = false,
     this.fontWeight,
     this.fontStyle,
+    this.meta, // <-- NEW
   });
 
   PanelElementModel copyWith({
@@ -49,6 +51,7 @@ class PanelElementModel {
     bool? locked,
     FontWeight? fontWeight,
     FontStyle? fontStyle,
+    String? meta, // <-- NEW
   }) {
     return PanelElementModel(
       id: id ?? this.id,
@@ -64,6 +67,7 @@ class PanelElementModel {
       locked: locked ?? this.locked,
       fontWeight: fontWeight ?? this.fontWeight,
       fontStyle: fontStyle ?? this.fontStyle,
+      meta: meta ?? this.meta, // <-- NEW
     );
   }
 
@@ -84,6 +88,7 @@ class PanelElementModel {
       'locked': locked,
       'fontWeight': fontWeight?.index,
       'fontStyle': fontStyle?.index,
+      'meta': meta, // <-- NEW
     };
   }
 
@@ -114,10 +119,10 @@ class PanelElementModel {
       fontStyle: map['fontStyle'] != null
           ? FontStyle.values[map['fontStyle']]
           : null,
+      meta: map['meta'], // <-- NEW
     );
   }
 
-  // If this is a speech bubble, decode its value
   DragSpeechBubbleData? get speechBubbleData {
     if (type != 'speech_bubble') return null;
     try {
