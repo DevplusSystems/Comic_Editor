@@ -18,7 +18,9 @@ class PanelElementModel {
   final bool locked;
   final FontWeight? fontWeight;
   final FontStyle? fontStyle;
-  final String? meta; // <-- NEW: stores extra data like original bubble config
+  final String? meta; //
+  final String? groupId; // <-- NEW
+
 
   const PanelElementModel({
     required this.id,
@@ -35,6 +37,7 @@ class PanelElementModel {
     this.fontWeight,
     this.fontStyle,
     this.meta, // <-- NEW
+    this.groupId,
   });
 
   PanelElementModel copyWith({
@@ -52,6 +55,7 @@ class PanelElementModel {
     FontWeight? fontWeight,
     FontStyle? fontStyle,
     String? meta, // <-- NEW
+    String? groupId,
   }) {
     return PanelElementModel(
       id: id ?? this.id,
@@ -68,6 +72,8 @@ class PanelElementModel {
       fontWeight: fontWeight ?? this.fontWeight,
       fontStyle: fontStyle ?? this.fontStyle,
       meta: meta ?? this.meta, // <-- NEW
+      groupId: groupId ?? this.groupId,
+
     );
   }
 
@@ -89,6 +95,8 @@ class PanelElementModel {
       'fontWeight': fontWeight?.index,
       'fontStyle': fontStyle?.index,
       'meta': meta, // <-- NEW
+      'groupId': groupId,
+
     };
   }
 
@@ -120,6 +128,8 @@ class PanelElementModel {
           ? FontStyle.values[map['fontStyle']]
           : null,
       meta: map['meta'], // <-- NEW
+      groupId: map['groupId'] as String?,
+
     );
   }
 
