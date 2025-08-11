@@ -22,6 +22,16 @@ enum AlignAlignment { topLeft, topRight, bottomLeft, bottomRight }
 
 enum _SaveState { idle, saving, saved, error }
 
+// 1) Menu actions enum
+enum _MenuAction {
+  export,
+  preview,
+  toggleMargins,
+  toggleGrid,
+  layouts,
+  addPage
+}
+
 class PanelLayoutEditorScreen extends StatefulWidget {
   final Project project;
 
@@ -66,6 +76,8 @@ class _PanelLayoutEditorScreenState extends State<PanelLayoutEditorScreen>
   double _inspectorTop = 140.0;
   bool _lockAspect = false;
 
+  // --- Autosave state ---
+
   Timer? _autosaveTimer;
   bool _dirty = false;
   DateTime? _lastSavedAt;
@@ -79,10 +91,18 @@ class _PanelLayoutEditorScreenState extends State<PanelLayoutEditorScreen>
     _markDirty();
   }
 
+  // --- Page reordering state ---
+  int? _draggingPageIndex;
+  int? _hoveredPageIndex;
+  bool _showReorderStrip = false;
+
+
+
+
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addObserver(this); // 👈
+    WidgetsBinding.instance.addObserver(this);
 
     currentProject = widget.project;
     pages = List.from(widget.project.pages);
@@ -133,7 +153,66 @@ class _PanelLayoutEditorScreenState extends State<PanelLayoutEditorScreen>
     final screenHeight = MediaQuery.of(context).size.height;
 
     return Scaffold(
-      backgroundColor: Colors.white,
+      appBar: AppBar(
+        backgroundColor: Colors.blue.shade400,
+        foregroundColor: Colors.white,
+        title: Text(currentProject.name),
+        actions: [
+
+        /*  IconButton(
+            tooltip: pages.length > 1
+                ? (_showReorderStrip ? 'Hide Reorder' : 'Reorder Pages')
+                : 'Need at least 2 pages',
+            icon: Icon(
+              Icons.reorder,
+              // highlight when active; disabled handled by onPressed=null
+              color: _showReorderStrip ? Colors.amberAccent : Colors.white,
+            ),
+            onPressed: pages.length > 1
+                ? () {
+              setState(() {
+                _showReorderStrip = !_showReorderStrip;
+                _draggingPageIndex = null;
+                _hoveredPageIndex = null;
+              });
+            }
+                : null,
+          ),*/
+/*
+          Builder(builder: (context) {
+            final canReorder = pages.length > 1;
+            return IconButton(
+              tooltip: canReorder
+                  ? (_showReorderStrip ? 'Hide Reorder' : 'Reorder Pages')
+                  : 'Need at least 2 pages',
+              icon: Icon(
+                Icons.reorder,
+                // highlight when active; dim when disabled
+                color: !canReorder
+                    ? Colors.white54
+                    : (_showReorderStrip ? Colors.amberAccent : Colors.white),
+              ),
+              onPressed: canReorder
+                  ? () {
+                setState(() {
+                  _showReorderStrip = !_showReorderStrip;
+                  _draggingPageIndex = null; // optional: clear drag state
+                  _hoveredPageIndex = null;
+                });
+              }
+                  : null,
+            );
+          }),
+*/
+          _buildReorderToggleAction(),  // ⬅️ new button
+
+         /* Padding(
+            padding: const EdgeInsets.only(right: 8.0),
+            child: _buildSaveStatusPill(), // your existing pill
+          ),*/
+          _buildOverflowMenu(),
+        ],
+      ),
       body: GestureDetector(
         onHorizontalDragEnd: (details) {
           if (details.primaryVelocity != null) {
@@ -149,7 +228,7 @@ class _PanelLayoutEditorScreenState extends State<PanelLayoutEditorScreen>
           children: [
             Column(
               children: [
-                _buildAppBar(),
+                _buildPageActionButtons(),
                 Expanded(
                   child: Center(
                     child: AspectRatio(
@@ -301,18 +380,15 @@ class _PanelLayoutEditorScreenState extends State<PanelLayoutEditorScreen>
                     ),
                   ),
                 ),
-                _buildPages(),
+
+                // 4) Footer – ONLY pages section (make sure your _buildFooter now shows pages strip)
                 _buildFooter(),
               ],
             ),
-            if (isDrawerOpen)
-              Positioned.fill(
-                child: GestureDetector(
-                  behavior: HitTestBehavior.translucent,
-                  onTap: () => setState(() => isDrawerOpen = false),
-                  child: Container(color: Colors.transparent),
-                ),
-              ),
+
+            // 5) Right floating inspector (kept)
+            if (selectedPanel != null)
+              _buildRightFloatingInspector(selectedPanel!),
 
             _buildFloatingDrawerWithToggle(
                 screenHeight, 150, screenHeight * 0.4),
@@ -350,13 +426,7 @@ class _PanelLayoutEditorScreenState extends State<PanelLayoutEditorScreen>
                 ),
               ),
             ),
-
-/*
             if (selectedPanel != null) _buildFloatingEditButton(),
-*/
-            // 👉 Right floating inspector (when a panel is selected)
-            if (selectedPanel != null)
-              _buildRightFloatingInspector(selectedPanel!),
           ],
         ),
       ),
@@ -454,6 +524,289 @@ class _PanelLayoutEditorScreenState extends State<PanelLayoutEditorScreen>
       },
     );
   }
+
+  // end of save
+
+  // ---------- Menu Drawer ----------
+// 2) Overflow menu widget
+  Widget _buildOverflowMenu() {
+    return PopupMenuButton<_MenuAction>(
+      tooltip: 'Menu',
+      icon: const Icon(Icons.menu),
+      splashRadius: 22,
+      onSelected: _onMenuSelected,
+      itemBuilder: (context) => [
+        PopupMenuItem(
+          value: _MenuAction.export,
+          child: _menuRow(Icons.download, 'Export'),
+        ),
+        PopupMenuItem(
+          value: _MenuAction.preview,
+          child: _menuRow(Icons.remove_red_eye, 'Preview'),
+        ),
+        const PopupMenuDivider(),
+        PopupMenuItem(
+          value: _MenuAction.toggleMargins,
+          child: _menuRow(
+            _showPageMargins ? Icons.pages_outlined : Icons.pages,
+            _showPageMargins ? 'Hide Margin' : 'Show Margin',
+          ),
+        ),
+        PopupMenuItem(
+          value: _MenuAction.toggleGrid,
+          child: _menuRow(
+            _showGrid ? Icons.grid_off : Icons.grid_on,
+            _showGrid ? 'Hide Grid' : 'Show Grid',
+          ),
+        ),
+        const PopupMenuDivider(),
+        PopupMenuItem(
+          value: _MenuAction.layouts,
+          child: _menuRow(Icons.dashboard_customize, 'Layouts'),
+        ),
+        PopupMenuItem(
+          value: _MenuAction.addPage,
+          child: _menuRow(Icons.add_box, 'Add Page'),
+        ),
+      ],
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      elevation: 6,
+    );
+  }
+
+// 3) Handle selection
+  void _onMenuSelected(_MenuAction action) {
+    switch (action) {
+      case _MenuAction.export:
+        _showExportOptions();
+        break;
+      case _MenuAction.preview:
+        _showAllPagesPreview();
+        break;
+      case _MenuAction.toggleMargins:
+        _mutate(() => _showPageMargins = !_showPageMargins);
+        break;
+      case _MenuAction.toggleGrid:
+        _mutate(() => _showGrid = !_showGrid);
+        break;
+      case _MenuAction.layouts:
+        _showLayoutTemplates();
+        break;
+      case _MenuAction.addPage:
+        _addPage();
+        break;
+    }
+  }
+
+// 4) Simple row for icon + text in menu
+  Widget _menuRow(IconData icon, String text) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, size: 18, color: Colors.black87),
+        const SizedBox(width: 10),
+        Text(text, style: const TextStyle(color: Colors.black87)),
+      ],
+    );
+  }
+
+  // ---------- Menu Drawer ----------
+
+  //---------- AutoSave functionality ----------
+
+  // ---------- Page Ra_arrangement ----------
+
+  Widget _buildReorderablePageThumb(int index) {
+    return LongPressDraggable<int>(
+      data: index,
+      feedback: Material(
+        color: Colors.transparent,
+        child: Opacity(opacity: 0.9, child: _buildPageThumbnail(index)),
+      ),
+      childWhenDragging: Opacity(
+        opacity: 0.4,
+        child: _buildPageThumbnail(index),
+      ),
+      onDragStarted: () => setState(() => _draggingPageIndex = index),
+      onDraggableCanceled: (_, __) => setState(() {
+        _draggingPageIndex = null;
+        _hoveredPageIndex = null;
+      }),
+      onDragEnd: (_) => setState(() {
+        _draggingPageIndex = null;
+        _hoveredPageIndex = null;
+      }),
+      child: DragTarget<int>(
+        onWillAccept: (from) {
+          setState(() => _hoveredPageIndex = index);
+          return from != index;
+        },
+        onLeave: (_) => setState(() => _hoveredPageIndex = null),
+        onAccept: (from) {
+          _reorderPages(from, index); // insert BEFORE this index
+          setState(() {
+            _hoveredPageIndex = null;
+            _draggingPageIndex = null;
+          });
+        },
+        builder: (context, _, __) {
+          return GestureDetector(
+            onTap: () => _switchPage(index),
+            child: _buildPageThumbnail(index),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildEndDropTarget() {
+    final isHoverEnd = _hoveredPageIndex == pages.length;
+    return DragTarget<int>(
+      onWillAccept: (_) {
+        setState(() => _hoveredPageIndex = pages.length);
+        return true;
+      },
+      onLeave: (_) => setState(() => _hoveredPageIndex = null),
+      onAccept: (from) {
+        _reorderPages(from, pages.length); // append to end
+        setState(() => _hoveredPageIndex = null);
+      },
+      builder: (context, _, __) {
+        return AnimatedContainer(
+          duration: const Duration(milliseconds: 120),
+          margin: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
+          width: 64,
+          height: 112,
+          decoration: BoxDecoration(
+            color: isHoverEnd ? Colors.orange.shade50 : Colors.white,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(
+              color: isHoverEnd ? Colors.orange : Colors.black12,
+              style: BorderStyle.solid,
+              width: isHoverEnd ? 2 : 1,
+            ),
+          ),
+          child: const Center(
+            child: Icon(Icons.add, size: 20),
+          ),
+        );
+      },
+    );
+  }
+
+  void _reorderPages(int from, int to) {
+    if (from == to) return;
+
+    setState(() {
+      // If user drops onto the final "add to end" zone, `to` can equal pages.length
+      final removed = pages.removeAt(from);
+      final insertIndex = (to > from) ? to - 1 : to;
+      final safeIndex = insertIndex.clamp(0, pages.length);
+      pages.insert(safeIndex, removed);
+
+      // Keep current page selection reasonable after move
+      var cur = _currentPage;
+      if (cur == from) {
+        cur = safeIndex;
+      } else if (from < cur && to - 1 >= cur) {
+        cur -= 1; // dragged a page up past the current page
+      } else if (from > cur && to <= cur) {
+        cur += 1; // dragged a page down before the current page
+      }
+      _currentPage = cur.clamp(0, pages.length - 1);
+      currentPageIndex = _currentPage;
+
+      currentProject = currentProject.copyWith(
+        pages: pages,
+        lastModified: DateTime.now(),
+      );
+    });
+    _markDirty();
+  }
+
+  Widget _buildPageThumbnail(int pageIndex) {
+    // small portrait preview
+    const double thumbW = 70;
+    const double thumbH = 80;
+
+    final wScale = thumbW / _canvasWidth;
+    final hScale = thumbH / _canvasHeight;
+
+    final isActive = _currentPage == pageIndex;
+    final isHover = _hoveredPageIndex == pageIndex;
+
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 120),
+      margin: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
+      padding: const EdgeInsets.all(4),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(
+          color: isActive
+              ? Colors.blue
+              : (isHover ? Colors.orange : Colors.black12),
+          width: isActive ? 2 : 1,
+        ),
+        boxShadow: [
+          if (isActive)
+            const BoxShadow(
+              color: Colors.black26,
+              blurRadius: 4,
+              offset: Offset(0, 2),
+            ),
+        ],
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          SizedBox(
+            width: thumbW,
+            height: thumbH,
+            child: Stack(
+              children: [
+                Container(
+                  decoration: BoxDecoration(
+                    color: Colors.grey[50],
+                    border: Border.all(color: Colors.black12),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                ),
+                // draw light panel boxes as a hint of layout
+                ...pages[pageIndex].map((p) {
+                  final l = p.x * wScale;
+                  final t = p.y * hScale;
+                  final w = (p.width * wScale).clamp(1.0, thumbW);
+                  final h = (p.height * hScale).clamp(1.0, thumbH);
+                  return Positioned(
+                    left: l,
+                    top: t,
+                    width: w,
+                    height: h,
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: Colors.grey.shade300,
+                        border:
+                            Border.all(color: Colors.grey.shade600, width: 0.8),
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
+                  );
+                }),
+              ],
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            '${pageIndex + 1}',
+            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ---------- Page Ra_arrangement ----------
 
   // ---------- Floating Inspector (RIGHT) ----------
   Widget _buildRightFloatingInspector(LayoutPanel panel) {
@@ -927,12 +1280,23 @@ class _PanelLayoutEditorScreenState extends State<PanelLayoutEditorScreen>
     return null;
   }
 
-  void _switchPage(int index) {
+/*  void _switchPage(int index) {
     setState(() {
       _currentPage = index;
       selectedPanel = null;
     });
+  }*/
+
+  // ---------- change this for Page Ra_arrangement ----------
+  void _switchPage(int index) {
+    setState(() {
+      _currentPage = index;
+      currentPageIndex = index; // keep this synced
+      selectedPanel = null;
+    });
   }
+
+  // ---------- Page Ra_arrangement ----------
 
   void _showAllPagesPreview() {
     Navigator.push(
@@ -1567,10 +1931,8 @@ class _PanelLayoutEditorScreenState extends State<PanelLayoutEditorScreen>
 
   @override
   void dispose() {
-    WidgetsBinding.instance.removeObserver(this); // 👈
+    WidgetsBinding.instance.removeObserver(this); //
     _autosaveTimer?.cancel();
-    // ensure we attempt a last save
-    // ignore: discarded_futures
     _flushAutosaveNow();
     Navigator.of(context).pop(currentProject); // your existing line
     super.dispose();
@@ -1589,7 +1951,6 @@ class _PanelLayoutEditorScreenState extends State<PanelLayoutEditorScreen>
   Widget _buildAppBar() {
     return Container(
       height: 60,
-      margin: EdgeInsets.only(top: MediaQuery.of(context).padding.top),
       decoration: BoxDecoration(
         color: Colors.yellow.shade50,
         borderRadius: BorderRadius.circular(10),
@@ -1604,36 +1965,8 @@ class _PanelLayoutEditorScreenState extends State<PanelLayoutEditorScreen>
       padding: EdgeInsets.symmetric(horizontal: 10, vertical: 5),
       child: Row(
         children: [
-     /*     const SizedBox(width: 8),
-          _buildSaveStatusPill(), // 👈 status*/
-          IconButton(
-            icon: Icon(Icons.arrow_back, color: Colors.black87),
-            onPressed: () {
-              final updatedProject = currentProject.copyWith(
-                pages: pages,
-                lastModified: DateTime.now(),
-              );
-              Navigator.pop(context, updatedProject);
-            },
-            tooltip: 'Back to Projects',
-          ),
-          Expanded(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  currentProject.name,
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.black87,
-                  ),
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ],
-            ),
-          ),
+          /*     const SizedBox(width: 8),
+          _buildSaveStatusPill(), // status*/
           SizedBox(width: 8),
           _buildAppBarButton(
             icon: Icons.download,
@@ -1803,34 +2136,42 @@ class _PanelLayoutEditorScreenState extends State<PanelLayoutEditorScreen>
   Widget _buildPages() {
     return Container(
       color: Colors.grey.shade200,
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
       child: Row(
         children: [
-          const Text("Pages:", style: TextStyle(fontWeight: FontWeight.bold)),
-          const SizedBox(width: 12),
-          IconButton(
-            icon: const Icon(Icons.arrow_back_ios),
-            onPressed:
-                _currentPage > 0 ? () => _switchPage(_currentPage - 1) : null,
+          Expanded( // ensures the pager stays centered regardless of future widgets
+            child: Center(
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text("Pages:", style: TextStyle(fontWeight: FontWeight.bold)),
+                  const SizedBox(width: 12),
+                  IconButton(
+                    icon: const Icon(Icons.arrow_back_ios),
+                    onPressed: _currentPage > 0 ? () => _switchPage(_currentPage - 1) : null,
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    '${_currentPage + 1} of ${pages.length}',
+                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                  ),
+                  const SizedBox(width: 8),
+                  IconButton(
+                    icon: const Icon(Icons.arrow_forward_ios),
+                    onPressed: _currentPage < pages.length - 1
+                        ? () => _switchPage(_currentPage + 1)
+                        : null,
+                  ),
+                ],
+              ),
+            ),
           ),
-          const SizedBox(width: 8),
-          Text(
-            '${_currentPage + 1} of ${pages.length}',
-            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-          ),
-          const SizedBox(width: 8),
-          IconButton(
-            icon: const Icon(Icons.arrow_forward_ios),
-            onPressed: _currentPage < pages.length - 1
-                ? () => _switchPage(_currentPage + 1)
-                : null,
-          ),
-          const Spacer(),
         ],
       ),
     );
   }
 
+  // ---------- change this for Page Ra_arrangement ----------
+/*
   Widget _buildFooter() {
     return Container(
       color: Colors.grey.shade200,
@@ -1929,6 +2270,159 @@ class _PanelLayoutEditorScreenState extends State<PanelLayoutEditorScreen>
       ),
     );
   }
+*/
+
+  Widget _buildFooter() {
+    return Container(
+      color: Colors.grey.shade200,
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _buildPages(),
+          const SizedBox(height: 2),
+
+          // === Re-order-able thumbnails strip (toggle visibility) ===
+          AnimatedCrossFade(
+            duration: const Duration(milliseconds: 180),
+            crossFadeState: _showReorderStrip
+                ? CrossFadeState.showFirst
+                : CrossFadeState.showSecond,
+            firstChild: SizedBox(
+              height: 130,
+              child: ListView.builder(
+                scrollDirection: Axis.horizontal,
+                itemCount: pages.length + 1, // include the end drop target
+                itemBuilder: (context, i) {
+                  if (i == pages.length) return _buildEndDropTarget();
+                  return _buildReorderablePageThumb(i);
+                },
+              ),
+            ),
+            secondChild: const SizedBox.shrink(), // hidden state
+          ),
+
+          // (Optional) small hint when visible
+          if (_showReorderStrip) ...[
+            const SizedBox(height: 4),
+            const Text(
+              'Drag thumbnails to reorder pages',
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 12, color: Colors.black54),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPageActionButtons() {
+    return Container(
+      color: Colors.grey.shade200,
+      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // === Your original buttons row ===
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: [
+                ElevatedButton.icon(
+                  onPressed: _canAddMorePanels ? _addSinglePanel : null,
+                  icon: const Icon(Icons.add, size: 18),
+                  label: const Text("Add Panel"),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor:
+                        _canAddMorePanels ? Colors.blue : Colors.grey,
+                    foregroundColor: Colors.white,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                ElevatedButton.icon(
+                  onPressed: selectedPanel != null ? _editSelectedPanel : null,
+                  icon: const Icon(Icons.edit, size: 18),
+                  label: const Text("Edit Panel"),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor:
+                        selectedPanel != null ? Colors.orange : Colors.grey,
+                    foregroundColor: Colors.white,
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                ElevatedButton.icon(
+                  onPressed:
+                      selectedPanel != null ? _deleteSelectedPanel : null,
+                  icon: const Icon(Icons.delete, size: 18),
+                  label: const Text("Delete Panel"),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor:
+                        selectedPanel != null ? Colors.red : Colors.grey,
+                    foregroundColor: Colors.white,
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                ElevatedButton.icon(
+                  onPressed: _showLayoutTemplates,
+                  icon: const Icon(Icons.dashboard_customize, size: 18),
+                  label: const Text("Layout Templates"),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.green,
+                    foregroundColor: Colors.white,
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                ElevatedButton.icon(
+                  onPressed: _saveAsDraft,
+                  icon: const Icon(Icons.save),
+                  label: const Text("Save"),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.green,
+                    foregroundColor: Colors.white,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                ElevatedButton.icon(
+                  onPressed: pages.length > 1
+                      ? () {
+                          _mutate(() {
+                            pages.removeAt(_currentPage);
+                            if (_currentPage > 0) _currentPage--;
+                            currentPageIndex = _currentPage;
+                            currentProject = currentProject.copyWith(
+                              pages: pages,
+                              lastModified: DateTime.now(),
+                            );
+                          });
+                        }
+                      : null,
+                  icon: const Icon(Icons.delete_forever),
+                  label: const Text("Delete Page"),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor:
+                        pages.length > 1 ? Colors.red : Colors.grey,
+                    foregroundColor: Colors.white,
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ---------- change this for Page Ra_arrangement ----------
 
   void _showExportOptions() {
     Printing.layoutPdf(
@@ -2067,8 +2561,7 @@ class _PanelLayoutEditorScreenState extends State<PanelLayoutEditorScreen>
 
   // ======= Your existing panel builder with edge handles (unchanged except inspector stays) =======
   Widget _buildPanelWithResize(
-      LayoutPanel panel, double scaleX, double scaleY)
-  {
+      LayoutPanel panel, double scaleX, double scaleY) {
     final viewScale = min(scaleX, scaleY);
 
     return Positioned(
@@ -2273,5 +2766,38 @@ class _PanelLayoutEditorScreenState extends State<PanelLayoutEditorScreen>
         ),
       );
     }
+  }
+
+  Widget _buildReorderToggleAction() {
+    final canReorder = pages.length > 1;
+    final label = _showReorderStrip ? 'Hide Reorder' : 'Reorder Pages';
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 4.0),
+      child: Tooltip(
+        message: canReorder ? label : 'Need at least 2 pages',
+        child: TextButton.icon(
+          icon: const Icon(Icons.pages, size: 20),
+          label: Text(label),
+          style: TextButton.styleFrom(
+            foregroundColor: canReorder ? Colors.white : Colors.white54,
+            backgroundColor: _showReorderStrip
+                ? Colors.white.withOpacity(0.12)
+                : Colors.transparent,
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          ),
+          onPressed: canReorder
+              ? () {
+            setState(() {
+              _showReorderStrip = !_showReorderStrip;
+              _draggingPageIndex = null; // clear any drag state
+              _hoveredPageIndex = null;
+            });
+          }
+              : null,
+        ),
+      ),
+    );
   }
 }

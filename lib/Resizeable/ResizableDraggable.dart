@@ -11,9 +11,7 @@ class ResizableDraggable extends StatefulWidget {
   final double minHeight;
   final double maxWidth;
   final double maxHeight;
-
   final bool isSelected;
-
 
   const ResizableDraggable({
     super.key,
@@ -26,8 +24,7 @@ class ResizableDraggable extends StatefulWidget {
     this.minHeight = 10.0,
     this.maxWidth = double.infinity,
     this.maxHeight = double.infinity,
-    this.isSelected = false, // default
-
+    this.isSelected = false,
   });
 
   @override
@@ -49,6 +46,33 @@ class ResizableDraggableState extends State<ResizableDraggable> {
     height = widget.size.height;
   }
 
+  // === NEW: external control API ===
+  void externalUpdate({Offset? position, Size? size, bool notify = false}) {
+    if (!mounted) return;
+    setState(() {
+      if (position != null) {
+        left = position.dx;
+        top = position.dy;
+      }
+      if (size != null) {
+        width = size.width.clamp(widget.minWidth, widget.maxWidth);
+        height = size.height.clamp(widget.minHeight, widget.maxHeight);
+      }
+    });
+    if (notify && widget.onPositionChanged != null) {
+      widget.onPositionChanged!(this.position, this.size);
+    }
+  }
+
+  void externalUpdatePosition(Offset position, {bool notify = false}) {
+    externalUpdate(position: position, notify: notify);
+  }
+
+  void externalUpdateSize(Size size, {bool notify = false}) {
+    externalUpdate(size: size, notify: notify);
+  }
+  // === END external API ===
+
   @override
   Widget build(BuildContext context) {
     return Positioned(
@@ -58,51 +82,49 @@ class ResizableDraggableState extends State<ResizableDraggable> {
         onPanUpdate: (details) {
           setState(() {
             left += details.delta.dx;
-            top += details.delta.dy;
+            top  += details.delta.dy;
           });
-        },
-        onPanEnd: (details) {
+          // notify continuously so parent state (selection bounds / overlay) stays in sync
           widget.onPositionChanged?.call(position, size);
         },
-        child: Container(
+        onPanEnd: (_) {
+          widget.onPositionChanged?.call(position, size);
+        },
+        child: SizedBox(
           width: width,
           height: height,
-          /*decoration: BoxDecoration(
-            border: Border.all(color: Colors.blue.withOpacity(0.3), width: 1),
-          ),*/
           child: Stack(
             children: [
               Positioned.fill(child: widget.child),
+
+              // resize handle (only when selected)
               if (widget.isSelected)
-              Align(
-                alignment: Alignment.bottomRight,
-                child: GestureDetector(
-                  onPanUpdate: (details) {
-                    setState(() {
-            /*          width = (width + details.delta.dx).clamp(30.0, 400.0);
-                      height = (height + details.delta.dy).clamp(30.0, 400.0);*/
-                      width = (width + details.delta.dx).clamp(10.0, double.infinity);
-                      height = (height + details.delta.dy).clamp(10.0, double.infinity);
-                    });
-                  },
-                  onPanEnd: (details) {
-                    widget.onPositionChanged?.call(position, size);
-                  },
-                  child: Container(
-                    width: 25,
-                    height: 25,
-                    decoration: const BoxDecoration(
-                      color: Colors.blue,
-                      borderRadius: BorderRadius.all(Radius.circular(10)),
-                    ),
-                    child: const Icon(
-                      Icons.open_with,
-                      size: 15,
-                      color: Colors.white,
+                Align(
+                  alignment: Alignment.bottomRight,
+                  child: GestureDetector(
+                    onPanUpdate: (details) {
+                      setState(() {
+                        width  = (width  + details.delta.dx)
+                            .clamp(widget.minWidth, widget.maxWidth);
+                        height = (height + details.delta.dy)
+                            .clamp(widget.minHeight, widget.maxHeight);
+                      });
+                      widget.onPositionChanged?.call(position, size);
+                    },
+                    onPanEnd: (_) {
+                      widget.onPositionChanged?.call(position, size);
+                    },
+                    child: Container(
+                      width: 25,
+                      height: 25,
+                      decoration: const BoxDecoration(
+                        color: Colors.blue,
+                        borderRadius: BorderRadius.all(Radius.circular(10)),
+                      ),
+                      child: const Icon(Icons.open_with, size: 15, color: Colors.white),
                     ),
                   ),
                 ),
-              ),
             ],
           ),
         ),

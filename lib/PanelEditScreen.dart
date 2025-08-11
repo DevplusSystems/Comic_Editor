@@ -22,29 +22,20 @@ import 'Resizeable/ResizableDraggable.dart';
 import 'package:flutter/services.dart';
 import 'SpeechDrag/DragSpeechBubbleComponents.dart';
 import 'SpeechDrag/DragSpeechBubbleData.dart';
-import 'SpeechDrag/SpeechBubblePainterWithText.dart';
 import 'TextEditorDialog/TextEditDialog.dart';
 
-
-
-
-
-
-import 'dart:convert';
-import 'dart:io';
 import 'dart:math' as math;
-import 'dart:typed_data';
-import 'dart:ui' as ui;
 
-import 'package:flutter/foundation.dart';
-import 'package:flutter/material.dart';
-import 'package:image_picker/image_picker.dart';
+// Menu actions
+enum _PanelMenuAction { toggleMultiSelect, group, ungroup, copy, paste ,delete}
+bool get _canPaste => true; // or: clipboardElements.isNotEmpty;
 class _Snap {
   final int index;
   final Offset offset;
   final double w, h;
   const _Snap(this.index, this.offset, this.w, this.h);
 }
+
 class PanelEditScreen extends StatefulWidget {
   final ComicPanel panel;
   final Offset panelOffset;
@@ -162,6 +153,7 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
       for (final i in _selected) {
         currentElements[i] = currentElements[i].copyWith(groupId: null);
       }
+      _selected.clear();
     });
   }
 
@@ -248,7 +240,7 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
         foregroundColor: Colors.white,
         actions: [
           // Toggle multi-select
-          IconButton(
+         /* IconButton(
             tooltip: _multiSelectMode ? 'Exit Multi-select' : 'Multi-select',
             icon: Icon(_multiSelectMode ? Icons.check_box : Icons.check_box_outline_blank),
             onPressed: () {
@@ -262,9 +254,9 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
                 }
               });
             },
-          ),
+          ),*/
 
-          // Group / Ungroup
+         /* // Group / Ungroup
           IconButton(
             tooltip: 'Group',
             icon: const Icon(Icons.merge_type),
@@ -274,12 +266,12 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
             tooltip: 'Ungroup',
             icon: const Icon(Icons.call_split),
             onPressed: _hasSelection ? _ungroupSelected : null,
-          ),
+          ),*/
 
-          // Copy / Paste now support multi
+         /* // Copy / Paste now support multi
           IconButton(icon: const Icon(Icons.copy), onPressed: _copySelection),
           IconButton(icon: const Icon(Icons.content_paste), onPressed: _pasteSelection),
-
+*/
           // Quick undo: remove last element (kept from yours)
           IconButton(
             icon: const Icon(Icons.undo),
@@ -295,13 +287,6 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
               }
             },
           ),
-
-          // Delete selection (single or multiple)
-          IconButton(
-            icon: const Icon(Icons.delete),
-            onPressed: _hasSelection ? _deleteSelection : null,
-          ),
-
           ElevatedButton(
             onPressed: _isSaving ? null : _savePanel,
             style: ElevatedButton.styleFrom(
@@ -317,9 +302,12 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
                 valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
               ),
             )
-                : const Text('Save'),
+                : const Text('Save Panel'),
           ),
           const SizedBox(width: 8),
+
+          _buildPanelOverflowMenu(),
+
         ],
       ),
       body: Stack(
@@ -681,7 +669,115 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
   }
 
   // === Group overlay (a single ResizableDraggable controlling the selection)
+  // === Group overlay (a single ResizableDraggable controlling the selection)
   Widget _buildGroupOverlay() {
+    // Initialize overlay rect to current selection bounds
+    final selRect = _selectionBounds();
+    _lastGroupRect ??= selRect;
+
+    return ResizableDraggable(
+      key: _groupOverlayKey, // stable key keeps the same state instance
+      isSelected: true,
+      size: _lastGroupRect!.size,
+      initialTop: _lastGroupRect!.top,
+      initialLeft: _lastGroupRect!.left,
+      minWidth: 10,
+      minHeight: 10,
+      onPositionChanged: (pos, size) {
+        final Rect current = Rect.fromLTWH(pos.dx, pos.dy, size.width, size.height);
+
+        // Move-only vs resize
+        final bool movingOnly =
+            (current.width  - _lastGroupRect!.width ).abs() < _kResizeEps &&
+                (current.height - _lastGroupRect!.height).abs() < _kResizeEps;
+
+        if (movingOnly) {
+          // end any resize session
+          if (_resizing) {
+            _resizing = false;
+            _resizeBaseRect = null;
+            _resizeSnap = [];
+          }
+
+          final dx = current.left - _lastGroupRect!.left;
+          final dy = current.top  - _lastGroupRect!.top;
+
+          if (dx != 0 || dy != 0) {
+            setState(() {
+              final upd = List<PanelElementModel>.from(currentElements);
+              for (final i in _selected) {
+                final e = upd[i];
+                final newPos = _clampOffset(
+                  e.offset + Offset(dx, dy),
+                  Size(e.width, e.height),
+                  widget.panelSize,
+                );
+                upd[i] = e.copyWith(offset: newPos);
+
+                // ⬅️ update the mounted draggable immediately
+                elementKeys[i].currentState?.externalUpdatePosition(newPos);
+              }
+              currentElements = upd;
+              _lastGroupRect = _lastGroupRect!.translate(dx, dy);
+            });
+          }
+          return;
+        }
+
+        // RESIZE path
+        if (!_resizing) {
+          _resizing = true;
+          _resizeBaseRect = _lastGroupRect; // baseline
+          _resizeSnap = _selected.map((i) {
+            final e = currentElements[i];
+            return _Snap(i, e.offset, e.width, e.height);
+          }).toList(growable: false);
+        }
+
+        final Rect base = _resizeBaseRect!;
+        final double sx = (base.width  <= 0.0001) ? 1.0 : (current.width  / base.width);
+        final double sy = (base.height <= 0.0001) ? 1.0 : (current.height / base.height);
+
+        setState(() {
+          final upd = List<PanelElementModel>.from(currentElements);
+          for (final s in _resizeSnap) {
+            final rel = s.offset - base.topLeft;
+            final newLeft = current.left + rel.dx * sx;
+            final newTop  = current.top  + rel.dy * sy;
+            final newW = (s.w * sx).clamp(5.0, double.infinity);
+            final newH = (s.h * sy).clamp(5.0, double.infinity);
+
+            final unclampedPos = Offset(newLeft, newTop);
+            final sz = Size(newW, newH);
+            final clampedPos = _clampOffset(unclampedPos, sz, widget.panelSize);
+
+            upd[s.index] = upd[s.index].copyWith(
+              offset: clampedPos,
+              width: sz.width,
+              height: sz.height,
+              size: sz,
+            );
+
+            // ⬅️ push visual update to the child draggable
+            elementKeys[s.index].currentState?.externalUpdate(
+              position: clampedPos,
+              size: sz,
+            );
+          }
+          currentElements = upd;
+          _lastGroupRect = current;
+        });
+      },
+      child: Container(
+        decoration: BoxDecoration(
+          border: Border.all(color: Colors.blueAccent, width: 2),
+        ),
+      ),
+    );
+  }
+
+
+  /* Widget _buildGroupOverlay() {
     // Initialize overlay rect to current selection bounds
     final selRect = _selectionBounds();
     _lastGroupRect ??= selRect;
@@ -773,8 +869,8 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
         ),
       ),
     );
-  }
-  void _resetGroupOverlayRect() {
+  }*/
+ /* void _resetGroupOverlayRect() {
     if (_hasMultiSelection) {
       final r = _selectionBounds();
       setState(() {
@@ -792,7 +888,34 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
         _resizeSnap = [];
       });
     }
+  }*/
+  void _resetGroupOverlayRect() {
+    if (_hasMultiSelection) {
+      final r = _selectionBounds();
+      setState(() {
+        _lastGroupRect = r;
+        _resizing = false;
+        _resizeBaseRect = null;
+        _resizeSnap = [];
+      });
+
+      // push to the overlay's ResizableDraggable so it jumps to new bounds
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _groupOverlayKey.currentState?.externalUpdate(
+          position: r.topLeft,
+          size: r.size,
+        );
+      });
+    } else {
+      setState(() {
+        _lastGroupRect = null;
+        _resizing = false;
+        _resizeBaseRect = null;
+        _resizeSnap = [];
+      });
+    }
   }
+
 
 
 
@@ -1654,7 +1777,105 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
       }
     }
   }
-}
+
+  Widget _buildPanelOverflowMenu() {
+    final String multiLabel =
+    _multiSelectMode ? 'Exit Multi-select' : 'Multi-select';
+
+    return PopupMenuButton<_PanelMenuAction>(
+      tooltip: 'More',
+      icon: const Icon(Icons.menu),
+      onSelected: _onPanelMenuSelected,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      elevation: 6,
+      itemBuilder: (context) => [
+        // Multi-select toggle with a checkmark
+        CheckedPopupMenuItem<_PanelMenuAction>(
+          value: _PanelMenuAction.toggleMultiSelect,
+          checked: _multiSelectMode,
+          child: _menuRow(
+            _multiSelectMode ? Icons.check_box : Icons.check_box_outline_blank,
+            multiLabel,
+          ),
+        ),
+        // Group / Ungroup (disabled as needed)
+        PopupMenuItem<_PanelMenuAction>(
+          value: _PanelMenuAction.group,
+          enabled: _hasMultiSelection,
+          child: _menuRow(Icons.merge_type, 'Group'),
+        ),
+        PopupMenuItem<_PanelMenuAction>(
+          value: _PanelMenuAction.ungroup,
+          enabled: _hasSelection,
+          child: _menuRow(Icons.call_split, 'Ungroup'),
+        ),
+        const PopupMenuDivider(),
+        // Copy / Paste
+        PopupMenuItem<_PanelMenuAction>(
+          value: _PanelMenuAction.copy,
+          enabled: _hasSelection,
+          child: _menuRow(Icons.copy, 'Copy'),
+        ),
+        PopupMenuItem<_PanelMenuAction>(
+          value: _PanelMenuAction.paste,
+          enabled: _canPaste,
+          child: _menuRow(Icons.content_paste, 'Paste'),
+        ),
+        // Delete selection (single or multiple)
+        PopupMenuItem<_PanelMenuAction>(
+          value: _PanelMenuAction.delete,
+          enabled: _canPaste,
+          child: _menuRow(Icons.delete, 'Delete'),
+        ),
+      ],
+    );
+  }
+
+  void _onPanelMenuSelected(_PanelMenuAction action) {
+    switch (action) {
+      case _PanelMenuAction.toggleMultiSelect:
+        setState(() {
+          _multiSelectMode = !_multiSelectMode;
+          if (!_multiSelectMode && _selected.length > 1) {
+            final keep = _selected.isNotEmpty ? _selected.last : null;
+            _selected.clear();
+            if (keep != null) _selected.add(keep);
+          }
+        });
+        break;
+
+      case _PanelMenuAction.group:
+        if (_hasMultiSelection) _groupSelected();
+        break;
+
+      case _PanelMenuAction.ungroup:
+        if (_hasSelection) _ungroupSelected();
+        break;
+
+      case _PanelMenuAction.copy:
+        if (_hasSelection) _copySelection();
+        break;
+
+      case _PanelMenuAction.paste:
+        _pasteSelection();
+        break;
+        case _PanelMenuAction.delete:
+        if (_hasSelection) _deleteSelection();
+        break;
+    }
+  }
+
+// Small helper to render icon + label in menu
+  Widget _menuRow(IconData icon, String text) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, size: 18, color: Colors.black87),
+        const SizedBox(width: 10),
+        Text(text, style: const TextStyle(color: Colors.black87)),
+      ],
+    );
+  }}
 
 
 /*class PanelEditScreen extends StatefulWidget {
