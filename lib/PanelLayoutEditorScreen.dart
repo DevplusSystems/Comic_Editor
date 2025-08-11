@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math';
 import 'dart:ui';
 import 'package:comic_editor/project_hive_model.dart';
@@ -19,6 +20,8 @@ import 'PreviewPdf/AllPagesPreviewScreen.dart';
 
 enum AlignAlignment { topLeft, topRight, bottomLeft, bottomRight }
 
+enum _SaveState { idle, saving, saved, error }
+
 class PanelLayoutEditorScreen extends StatefulWidget {
   final Project project;
 
@@ -29,7 +32,8 @@ class PanelLayoutEditorScreen extends StatefulWidget {
       _PanelLayoutEditorScreenState();
 }
 
-class _PanelLayoutEditorScreenState extends State<PanelLayoutEditorScreen> {
+class _PanelLayoutEditorScreenState extends State<PanelLayoutEditorScreen>
+    with WidgetsBindingObserver {
   late Project currentProject;
   int currentPageIndex = 0;
   bool isDrawerOpen = false;
@@ -62,15 +66,24 @@ class _PanelLayoutEditorScreenState extends State<PanelLayoutEditorScreen> {
   double _inspectorTop = 140.0;
   bool _lockAspect = false;
 
-  bool _isResizing = false;
+  Timer? _autosaveTimer;
+  bool _dirty = false;
+  DateTime? _lastSavedAt;
 
-  static const double _panelAspect = 3 / 4; // <-- adjust as needed
-  static const int _cols = 2;               // two panels per row
-  static const double _gap = 12.0;
+  final ValueNotifier<_SaveState> _saveState =
+      ValueNotifier<_SaveState>(_SaveState.saved);
+
+  // Wraps setState and marks project dirty
+  void _mutate(VoidCallback changes) {
+    setState(changes);
+    _markDirty();
+  }
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this); // 👈
+
     currentProject = widget.project;
     pages = List.from(widget.project.pages);
 
@@ -102,6 +115,16 @@ class _PanelLayoutEditorScreenState extends State<PanelLayoutEditorScreen> {
           }
         }
       }
+    }
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // Save when app backgrounds or is about to detach
+    if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.inactive ||
+        state == AppLifecycleState.detached) {
+      _flushAutosaveNow(); // fire & forget
     }
   }
 
@@ -165,7 +188,7 @@ class _PanelLayoutEditorScreenState extends State<PanelLayoutEditorScreen> {
                                       backgroundColor: Colors.white,
                                     );
                                     if (!_isOverlapping(newPanel)) {
-                                      setState(() {
+                                      _mutate(() {
                                         pages[_currentPage].add(newPanel);
                                       });
                                     }
@@ -210,7 +233,7 @@ class _PanelLayoutEditorScreenState extends State<PanelLayoutEditorScreen> {
                                             ],
                                           ),
                                         ),
-                                        ...pages[_currentPage].map((panel) {
+                                      ...pages[_currentPage].map((panel) {
                                         return Positioned(
                                           left: panel.x * scaleX,
                                           top: panel.y * scaleY,
@@ -218,9 +241,9 @@ class _PanelLayoutEditorScreenState extends State<PanelLayoutEditorScreen> {
                                             onTap: () {
                                               setState(() {
                                                 selectedPanel =
-                                                selectedPanel == panel
-                                                    ? null
-                                                    : panel;
+                                                    selectedPanel == panel
+                                                        ? null
+                                                        : panel;
                                               });
                                             },
                                             onPanUpdate: (details) {
@@ -229,10 +252,10 @@ class _PanelLayoutEditorScreenState extends State<PanelLayoutEditorScreen> {
                                               double newY = panel.y +
                                                   details.delta.dy / scaleY;
                                               if (_snapToGrid) {
-                                                newX = (newX / 20).round() *
-                                                    20.0;
-                                                newY = (newY / 20).round() *
-                                                    20.0;
+                                                newX =
+                                                    (newX / 20).round() * 20.0;
+                                                newY =
+                                                    (newY / 20).round() * 20.0;
                                               }
                                               newX = newX.clamp(
                                                   _pageMargin,
@@ -244,8 +267,8 @@ class _PanelLayoutEditorScreenState extends State<PanelLayoutEditorScreen> {
                                                   _canvasHeight -
                                                       panel.height -
                                                       _pageMargin);
-                                              final movedPanel = panel
-                                                  .copyWith(x: newX, y: newY);
+                                              final movedPanel = panel.copyWith(
+                                                  x: newX, y: newY);
                                               if (!_isOverlapping(movedPanel,
                                                   excludePanel: panel)) {
                                                 setState(() {
@@ -257,8 +280,7 @@ class _PanelLayoutEditorScreenState extends State<PanelLayoutEditorScreen> {
                                             child: Transform.scale(
                                               scale: min(scaleX, scaleY),
                                               alignment: Alignment.topLeft,
-                                              child:
-                                              _buildPanelContent(panel),
+                                              child: _buildPanelContent(panel),
                                             ),
                                           ),
                                         );
@@ -338,6 +360,98 @@ class _PanelLayoutEditorScreenState extends State<PanelLayoutEditorScreen> {
           ],
         ),
       ),
+    );
+  }
+
+  // ---------- Autosave ----------
+  void _markDirty() {
+    _dirty = true;
+    _scheduleAutosave(); // debounce
+  }
+
+  void _scheduleAutosave(
+      [Duration delay = const Duration(milliseconds: 1200)]) {
+    _autosaveTimer?.cancel();
+    _autosaveTimer = Timer(delay, _flushAutosaveNow);
+  }
+
+  Future<void> _flushAutosaveNow() async {
+    _autosaveTimer?.cancel();
+    if (!_dirty) return;
+    _saveState.value = _SaveState.saving;
+    try {
+      await _saveCurrentProjectToHive(); // writes to Hive
+      _dirty = false;
+      _lastSavedAt = DateTime.now();
+      _saveState.value = _SaveState.saved;
+    } catch (e) {
+      debugPrint('Autosave failed: $e');
+      _saveState.value = _SaveState.error;
+    }
+  }
+
+  Future<void> _saveCurrentProjectToHive() async {
+    final box = Hive.box<ProjectHiveModel>('drafts');
+    final updated = currentProject.copyWith(
+      pages: pages,
+      lastModified: DateTime.now(),
+    );
+    final hiveModel = toHiveModel(updated);
+    await box.put(updated.id, hiveModel);
+    currentProject = updated; // keep local in sync
+  }
+
+  // Optional: a small “Saved / Saving…” pill for AppBar
+  Widget _buildSaveStatusPill() {
+    return ValueListenableBuilder<_SaveState>(
+      valueListenable: _saveState,
+      builder: (_, state, __) {
+        Widget icon;
+        String text;
+        switch (state) {
+          case _SaveState.saving:
+            icon = const SizedBox(
+              width: 14,
+              height: 14,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            );
+            text = 'Saving…';
+            break;
+          case _SaveState.saved:
+            icon = const Icon(Icons.check, size: 16);
+            text = 'Saved';
+            break;
+          case _SaveState.error:
+            icon = const Icon(Icons.error_outline, size: 16);
+            text = 'Save failed';
+            break;
+          default:
+            icon = const SizedBox(width: 10, height: 10);
+            text = '';
+        }
+        return AnimatedContainer(
+          duration: const Duration(milliseconds: 150),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          decoration: BoxDecoration(
+            color: state == _SaveState.error
+                ? Colors.red.withOpacity(0.1)
+                : Colors.green.withOpacity(0.08),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(
+              color:
+                  state == _SaveState.error ? Colors.redAccent : Colors.green,
+              width: 0.8,
+            ),
+          ),
+          child: Row(
+            children: [
+              icon,
+              const SizedBox(width: 6),
+              Text(text, style: const TextStyle(fontSize: 12)),
+            ],
+          ),
+        );
+      },
     );
   }
 
@@ -617,7 +731,7 @@ class _PanelLayoutEditorScreenState extends State<PanelLayoutEditorScreen> {
 
     final resized = panel.copyWith(x: newX, y: newY, width: newW, height: newH);
     if (!_isOverlapping(resized, excludePanel: panel)) {
-      setState(() {
+      _mutate(() {
         final idx = pages[_currentPage].indexWhere((p) => p.id == panel.id);
         if (idx != -1) {
           pages[_currentPage][idx] = resized;
@@ -628,7 +742,7 @@ class _PanelLayoutEditorScreenState extends State<PanelLayoutEditorScreen> {
   }
 
   void _addPage() {
-    setState(() {
+    _mutate(() {
       /*final newPage = [
         LayoutPanel(
           id: DateTime
@@ -680,7 +794,7 @@ class _PanelLayoutEditorScreenState extends State<PanelLayoutEditorScreen> {
     );
 
     if (updatedPanel != null) {
-      setState(() {
+      _mutate(() {
         final index = pages[_currentPage].indexWhere(
           (p) => p.id == selectedPanel!.id,
         );
@@ -730,7 +844,7 @@ class _PanelLayoutEditorScreenState extends State<PanelLayoutEditorScreen> {
 
   void _deleteSelectedPanel() {
     if (selectedPanel != null) {
-      setState(() {
+      _mutate(() {
         pages[_currentPage].remove(selectedPanel);
         selectedPanel = null;
       });
@@ -768,7 +882,7 @@ class _PanelLayoutEditorScreenState extends State<PanelLayoutEditorScreen> {
     newPanel.x = freePosition.dx;
     newPanel.y = freePosition.dy;
 
-    setState(() {
+    _mutate(() {
       pages[_currentPage].add(newPanel);
     });
   }
@@ -1008,7 +1122,7 @@ class _PanelLayoutEditorScreenState extends State<PanelLayoutEditorScreen> {
     final contentWidth = _canvasWidth - (2 * _pageMargin);
     final panelHeight = (_canvasHeight - (4 * _pageMargin)) / 3;
 
-    setState(() {
+    _mutate(() {
       pages[_currentPage] = [
         LayoutPanel(
           id: "Header Panel",
@@ -1044,7 +1158,7 @@ class _PanelLayoutEditorScreenState extends State<PanelLayoutEditorScreen> {
     final panelWidth = contentWidth / 2;
     final panelHeight = _canvasHeight - (2 * _pageMargin);
 
-    setState(() {
+    _mutate(() {
       pages[_currentPage] = [
         LayoutPanel(
           id: "Left Column",
@@ -1072,7 +1186,7 @@ class _PanelLayoutEditorScreenState extends State<PanelLayoutEditorScreen> {
     final panelWidth = contentWidth / 3;
     final panelHeight = _canvasHeight - (2 * _pageMargin);
 
-    setState(() {
+    _mutate(() {
       pages[_currentPage] = [
         LayoutPanel(
           id: "Column 1",
@@ -1109,7 +1223,7 @@ class _PanelLayoutEditorScreenState extends State<PanelLayoutEditorScreen> {
     final panelWidth = contentWidth / 2;
     final panelHeight = contentHeight / 2;
 
-    setState(() {
+    _mutate(() {
       pages[_currentPage] = [
         LayoutPanel(
           id: "Top Left",
@@ -1153,7 +1267,7 @@ class _PanelLayoutEditorScreenState extends State<PanelLayoutEditorScreen> {
     final headerHeight = _canvasHeight * 0.2;
     final contentHeight = _canvasHeight - headerHeight - (3 * _pageMargin);
 
-    setState(() {
+    _mutate(() {
       pages[_currentPage] = [
         LayoutPanel(
           id: "Header",
@@ -1182,7 +1296,7 @@ class _PanelLayoutEditorScreenState extends State<PanelLayoutEditorScreen> {
     final panelHeight = _canvasHeight * 0.6;
     final startY = (_canvasHeight - panelHeight) / 2;
 
-    setState(() {
+    _mutate(() {
       pages[_currentPage] = [
         LayoutPanel(
           id: "Panel 1",
@@ -1219,7 +1333,7 @@ class _PanelLayoutEditorScreenState extends State<PanelLayoutEditorScreen> {
     final bottomPanelHeight =
         _canvasHeight - topPanelHeight - (3 * _pageMargin);
 
-    setState(() {
+    _mutate(() {
       pages[_currentPage] = [
         LayoutPanel(
           id: "Top Panel",
@@ -1250,7 +1364,7 @@ class _PanelLayoutEditorScreenState extends State<PanelLayoutEditorScreen> {
     final bottomRightHeight =
         _canvasHeight - topRightHeight - (3 * _pageMargin);
 
-    setState(() {
+    _mutate(() {
       pages[_currentPage] = [
         LayoutPanel(
           id: "Main Article",
@@ -1453,7 +1567,12 @@ class _PanelLayoutEditorScreenState extends State<PanelLayoutEditorScreen> {
 
   @override
   void dispose() {
-    Navigator.of(context).pop(currentProject);
+    WidgetsBinding.instance.removeObserver(this); // 👈
+    _autosaveTimer?.cancel();
+    // ensure we attempt a last save
+    // ignore: discarded_futures
+    _flushAutosaveNow();
+    Navigator.of(context).pop(currentProject); // your existing line
     super.dispose();
   }
 
@@ -1485,6 +1604,8 @@ class _PanelLayoutEditorScreenState extends State<PanelLayoutEditorScreen> {
       padding: EdgeInsets.symmetric(horizontal: 10, vertical: 5),
       child: Row(
         children: [
+     /*     const SizedBox(width: 8),
+          _buildSaveStatusPill(), // 👈 status*/
           IconButton(
             icon: Icon(Icons.arrow_back, color: Colors.black87),
             onPressed: () {
@@ -1530,7 +1651,7 @@ class _PanelLayoutEditorScreenState extends State<PanelLayoutEditorScreen> {
             icon: _showPageMargins ? Icons.pages_outlined : Icons.pages,
             label: _showPageMargins ? 'Hide Margin' : 'Show Margin',
             onPressed: () {
-              setState(() {
+              _mutate(() {
                 _showPageMargins = !_showPageMargins;
               });
             },
@@ -1540,7 +1661,7 @@ class _PanelLayoutEditorScreenState extends State<PanelLayoutEditorScreen> {
             icon: _showGrid ? Icons.grid_off : Icons.grid_on,
             label: _showGrid ? 'Hide Grid' : 'Show Grid',
             onPressed: () {
-              setState(() {
+              _mutate(() {
                 _showGrid = !_showGrid;
               });
             },
@@ -1782,7 +1903,7 @@ class _PanelLayoutEditorScreenState extends State<PanelLayoutEditorScreen> {
                 ElevatedButton.icon(
                   onPressed: pages.length > 1
                       ? () {
-                          setState(() {
+                    _mutate(() {
                             pages.removeAt(_currentPage);
                             if (_currentPage > 0) _currentPage--;
                             currentProject = currentProject.copyWith(
@@ -1946,7 +2067,8 @@ class _PanelLayoutEditorScreenState extends State<PanelLayoutEditorScreen> {
 
   // ======= Your existing panel builder with edge handles (unchanged except inspector stays) =======
   Widget _buildPanelWithResize(
-      LayoutPanel panel, double scaleX, double scaleY) {
+      LayoutPanel panel, double scaleX, double scaleY)
+  {
     final viewScale = min(scaleX, scaleY);
 
     return Positioned(
@@ -2071,7 +2193,7 @@ class _PanelLayoutEditorScreenState extends State<PanelLayoutEditorScreen> {
 
             final resized = panel.copyWith(x: newX, width: newW);
             if (!_isOverlapping(resized, excludePanel: panel)) {
-              setState(() {
+              _mutate(() {
                 final idx =
                     pages[_currentPage].indexWhere((p) => p.id == panel.id);
                 if (idx != -1) {
@@ -2124,7 +2246,7 @@ class _PanelLayoutEditorScreenState extends State<PanelLayoutEditorScreen> {
 
             final resized = panel.copyWith(y: newY, height: newH);
             if (!_isOverlapping(resized, excludePanel: panel)) {
-              setState(() {
+              _mutate(() {
                 final idx =
                     pages[_currentPage].indexWhere((p) => p.id == panel.id);
                 if (idx != -1) {

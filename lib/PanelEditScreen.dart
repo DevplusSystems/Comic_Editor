@@ -302,7 +302,7 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
             onPressed: _hasSelection ? _deleteSelection : null,
           ),
 
-         /* ElevatedButton(
+          ElevatedButton(
             onPressed: _isSaving ? null : _savePanel,
             style: ElevatedButton.styleFrom(
               backgroundColor: Colors.green,
@@ -317,8 +317,8 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
                 valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
               ),
             )
-                : const Text('Save Panel'),
-          ),*/
+                : const Text('Save'),
+          ),
           const SizedBox(width: 8),
         ],
       ),
