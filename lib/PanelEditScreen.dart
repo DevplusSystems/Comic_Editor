@@ -33,9 +33,9 @@ class _Snap {
   final int index;
   final Offset offset;
   final double w, h;
+
   const _Snap(this.index, this.offset, this.w, this.h);
 }
-
 class PanelEditScreen extends StatefulWidget {
   final ComicPanel panel;
   final Offset panelOffset;
@@ -119,14 +119,20 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
 
   // === selection helpers
   void _selectOnly(int index) {
-    setState(() { _selected..clear()..add(index); });
+    setState(() {
+      _selected
+        ..clear()
+        ..add(index);
+    });
     _resetGroupOverlayRect();
   }
 
   void _toggleSelect(int index) {
     setState(() {
-      if (_selected.contains(index)) _selected.remove(index);
-      else _selected.add(index);
+      if (_selected.contains(index))
+        _selected.remove(index);
+      else
+        _selected.add(index);
     });
     _resetGroupOverlayRect();
   }
@@ -204,10 +210,11 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
         currentElements.add(e);
         elementKeys.add(GlobalKey<ResizableDraggableState>());
       }
-      _selected
-        ..clear();
+      _selected..clear();
       // reselect pasted ones
-      for (int k = currentElements.length - newOnes.length; k < currentElements.length; k++) {
+      for (int k = currentElements.length - newOnes.length;
+          k < currentElements.length;
+          k++) {
         _selected.add(k);
       }
     });
@@ -240,7 +247,7 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
         foregroundColor: Colors.white,
         actions: [
           // Toggle multi-select
-         /* IconButton(
+          /* IconButton(
             tooltip: _multiSelectMode ? 'Exit Multi-select' : 'Multi-select',
             icon: Icon(_multiSelectMode ? Icons.check_box : Icons.check_box_outline_blank),
             onPressed: () {
@@ -256,7 +263,7 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
             },
           ),*/
 
-         /* // Group / Ungroup
+          /* // Group / Ungroup
           IconButton(
             tooltip: 'Group',
             icon: const Icon(Icons.merge_type),
@@ -268,7 +275,7 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
             onPressed: _hasSelection ? _ungroupSelected : null,
           ),*/
 
-         /* // Copy / Paste now support multi
+          /* // Copy / Paste now support multi
           IconButton(icon: const Icon(Icons.copy), onPressed: _copySelection),
           IconButton(icon: const Icon(Icons.content_paste), onPressed: _pasteSelection),
 */
@@ -278,14 +285,14 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
             onPressed: _isSaving
                 ? null
                 : () {
-              if (currentElements.isNotEmpty && elementKeys.isNotEmpty) {
-                setState(() {
-                  currentElements.removeLast();
-                  elementKeys.removeLast();
-                  _clearSelection();
-                });
-              }
-            },
+                    if (currentElements.isNotEmpty && elementKeys.isNotEmpty) {
+                      setState(() {
+                        currentElements.removeLast();
+                        elementKeys.removeLast();
+                        _clearSelection();
+                      });
+                    }
+                  },
           ),
           ElevatedButton(
             onPressed: _isSaving ? null : _savePanel,
@@ -295,19 +302,18 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
             ),
             child: _isSaving
                 ? const SizedBox(
-              width: 16,
-              height: 16,
-              child: CircularProgressIndicator(
-                strokeWidth: 2,
-                valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-              ),
-            )
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                    ),
+                  )
                 : const Text('Save Panel'),
           ),
           const SizedBox(width: 8),
 
           _buildPanelOverflowMenu(),
-
         ],
       ),
       body: Stack(
@@ -320,8 +326,10 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
                   child: AspectRatio(
                     aspectRatio: w / h,
                     child: Container(
-                      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                      decoration: BoxDecoration(borderRadius: BorderRadius.circular(10)),
+                      margin: const EdgeInsets.symmetric(
+                          horizontal: 16, vertical: 10),
+                      decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(10)),
                       child: ClipRRect(
                         borderRadius: BorderRadius.circular(20),
                         child: RepaintBoundary(
@@ -332,7 +340,9 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
                               clipBehavior: Clip.hardEdge,
                               children: [
                                 if (_isEditing)
-                                  CustomPaint(size: Size.infinite, painter: GridPainter()),
+                                  CustomPaint(
+                                      size: Size.infinite,
+                                      painter: GridPainter()),
                                 if (isDrawing)
                                   Positioned.fill(
                                     child: DrawingCanvas(
@@ -350,7 +360,8 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
                                     child: Text(
                                       'No elements added yet.\nUse the tools below to add content.',
                                       textAlign: TextAlign.center,
-                                      style: TextStyle(fontSize: 16, color: Colors.grey),
+                                      style: TextStyle(
+                                          fontSize: 16, color: Colors.grey),
                                     ),
                                   ),
 
@@ -426,69 +437,72 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
         );
         break;
 
-      case 'speech_bubble': {
-        final isSelected = _selected.contains(index);
-        final img = _buildImageElement(element);
-        final decorated = Container(
-          decoration: BoxDecoration(
-            border: isSelected ? Border.all(color: Colors.blue, width: 2) : null,
-          ),
-          child: img,
-        );
-
-        if (_isEditing) {
-          return ResizableDraggable(
-            key: elementKeys[index],
-            isSelected: isSelected,
-            size: Size(element.width, element.height),
-            initialTop: element.offset.dy,
-            initialLeft: element.offset.dx,
-            minWidth: 10,
-            minHeight: 10,
-            onPositionChanged: (pos, size) {
-              if (!mounted) return;
-              setState(() {
-                currentElements[index] = currentElements[index].copyWith(
-                  offset: pos,
-                  size: size,
-                  width: size.width,
-                  height: size.height,
-                );
-              });
-            },
-            child: GestureDetector(
-              onTapDown: (d) => _lastTapLocal = d.localPosition,
-              onTap: () {
-                final el = currentElements[index];
-                if (!_multiSelectMode && el.groupId != null) {
-                  final gid = el.groupId;
-                  final indices = <int>[];
-                  for (int i = 0; i < currentElements.length; i++) {
-                    if (currentElements[i].groupId == gid) indices.add(i);
-                  }
-                  setState(() {
-                    _selected
-                      ..clear()
-                      ..addAll(indices);
-                  });
-                } else if (_multiSelectMode) {
-                  _toggleSelect(index);
-                } else {
-                  _selectOnly(index);
-                }
-              },
-              onDoubleTap: () => _editElement(index),
-              child: decorated,
+      case 'speech_bubble':
+        {
+          final isSelected = _selected.contains(index);
+          final img = _buildImageElement(element);
+          final decorated = Container(
+            decoration: BoxDecoration(
+              border:
+                  isSelected ? Border.all(color: Colors.blue, width: 2) : null,
             ),
+            child: img,
           );
-        } else {
-          return Positioned(
-            top: element.offset.dy,
-            left: element.offset.dx,
-            child: SizedBox(width: element.width, height: element.height, child: img),
-          );
+
+          if (_isEditing) {
+            return ResizableDraggable(
+              key: elementKeys[index],
+              isSelected: isSelected,
+              size: Size(element.width, element.height),
+              initialTop: element.offset.dy,
+              initialLeft: element.offset.dx,
+              minWidth: 10,
+              minHeight: 10,
+              onPositionChanged: (pos, size) {
+                if (!mounted) return;
+                setState(() {
+                  currentElements[index] = currentElements[index].copyWith(
+                    offset: pos,
+                    size: size,
+                    width: size.width,
+                    height: size.height,
+                  );
+                });
+              },
+              child: GestureDetector(
+                onTapDown: (d) => _lastTapLocal = d.localPosition,
+                onTap: () {
+                  final el = currentElements[index];
+                  if (!_multiSelectMode && el.groupId != null) {
+                    final gid = el.groupId;
+                    final indices = <int>[];
+                    for (int i = 0; i < currentElements.length; i++) {
+                      if (currentElements[i].groupId == gid) indices.add(i);
+                    }
+                    setState(() {
+                      _selected
+                        ..clear()
+                        ..addAll(indices);
+                    });
+                  } else if (_multiSelectMode) {
+                    _toggleSelect(index);
+                  } else {
+                    _selectOnly(index);
+                  }
+                },
+                onDoubleTap: () => _editElement(index),
+                child: decorated,
+              ),
+            );
+          } else {
+            return Positioned(
+              top: element.offset.dy,
+              left: element.offset.dx,
+              child: SizedBox(
+                  width: element.width, height: element.height, child: img),
+            );
+          }
         }
-      }
 
       case 'image':
         child = SizedBox(
@@ -532,7 +546,8 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
         final isSelected = _selected.contains(index);
         final decoratedChild = Container(
           decoration: BoxDecoration(
-            border: isSelected ? Border.all(color: Colors.blue, width: 2) : null,
+            border:
+                isSelected ? Border.all(color: Colors.blue, width: 2) : null,
           ),
           child: drawingWidget,
         );
@@ -585,7 +600,10 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
           return Positioned(
             top: element.offset.dy,
             left: element.offset.dx,
-            child: SizedBox(width: element.width, height: element.height, child: drawingWidget),
+            child: SizedBox(
+                width: element.width,
+                height: element.height,
+                child: drawingWidget),
           );
         }
 
@@ -595,7 +613,8 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
           height: element.height,
           color: Colors.red.withOpacity(0.3),
           child: Center(
-            child: Text('Unknown: ${element.type}', style: const TextStyle(fontSize: 12)),
+            child: Text('Unknown: ${element.type}',
+                style: const TextStyle(fontSize: 12)),
           ),
         );
     }
@@ -663,12 +682,12 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
       return Positioned(
         top: element.offset.dy,
         left: element.offset.dx,
-        child: SizedBox(width: element.width, height: element.height, child: child),
+        child: SizedBox(
+            width: element.width, height: element.height, child: child),
       );
     }
   }
 
-  // === Group overlay (a single ResizableDraggable controlling the selection)
   // === Group overlay (a single ResizableDraggable controlling the selection)
   Widget _buildGroupOverlay() {
     // Initialize overlay rect to current selection bounds
@@ -676,7 +695,8 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
     _lastGroupRect ??= selRect;
 
     return ResizableDraggable(
-      key: _groupOverlayKey, // stable key keeps the same state instance
+      key: _groupOverlayKey,
+      // stable key keeps the same state instance
       isSelected: true,
       size: _lastGroupRect!.size,
       initialTop: _lastGroupRect!.top,
@@ -684,11 +704,12 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
       minWidth: 10,
       minHeight: 10,
       onPositionChanged: (pos, size) {
-        final Rect current = Rect.fromLTWH(pos.dx, pos.dy, size.width, size.height);
+        final Rect current =
+            Rect.fromLTWH(pos.dx, pos.dy, size.width, size.height);
 
         // Move-only vs resize
         final bool movingOnly =
-            (current.width  - _lastGroupRect!.width ).abs() < _kResizeEps &&
+            (current.width - _lastGroupRect!.width).abs() < _kResizeEps &&
                 (current.height - _lastGroupRect!.height).abs() < _kResizeEps;
 
         if (movingOnly) {
@@ -700,7 +721,7 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
           }
 
           final dx = current.left - _lastGroupRect!.left;
-          final dy = current.top  - _lastGroupRect!.top;
+          final dy = current.top - _lastGroupRect!.top;
 
           if (dx != 0 || dy != 0) {
             setState(() {
@@ -735,15 +756,17 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
         }
 
         final Rect base = _resizeBaseRect!;
-        final double sx = (base.width  <= 0.0001) ? 1.0 : (current.width  / base.width);
-        final double sy = (base.height <= 0.0001) ? 1.0 : (current.height / base.height);
+        final double sx =
+            (base.width <= 0.0001) ? 1.0 : (current.width / base.width);
+        final double sy =
+            (base.height <= 0.0001) ? 1.0 : (current.height / base.height);
 
         setState(() {
           final upd = List<PanelElementModel>.from(currentElements);
           for (final s in _resizeSnap) {
             final rel = s.offset - base.topLeft;
             final newLeft = current.left + rel.dx * sx;
-            final newTop  = current.top  + rel.dy * sy;
+            final newTop = current.top + rel.dy * sy;
             final newW = (s.w * sx).clamp(5.0, double.infinity);
             final newH = (s.h * sy).clamp(5.0, double.infinity);
 
@@ -760,9 +783,9 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
 
             // ⬅️ push visual update to the child draggable
             elementKeys[s.index].currentState?.externalUpdate(
-              position: clampedPos,
-              size: sz,
-            );
+                  position: clampedPos,
+                  size: sz,
+                );
           }
           currentElements = upd;
           _lastGroupRect = current;
@@ -775,7 +798,6 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
       ),
     );
   }
-
 
   /* Widget _buildGroupOverlay() {
     // Initialize overlay rect to current selection bounds
@@ -870,7 +892,7 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
       ),
     );
   }*/
- /* void _resetGroupOverlayRect() {
+  /* void _resetGroupOverlayRect() {
     if (_hasMultiSelection) {
       final r = _selectionBounds();
       setState(() {
@@ -916,9 +938,6 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
     }
   }
 
-
-
-
   Rect _selectionBounds() {
     double minL = double.infinity, minT = double.infinity;
     double maxR = -double.infinity, maxB = -double.infinity;
@@ -943,13 +962,14 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
       final rel = e.offset - Offset(from.left, from.top);
 
       final newLeft = to.left + rel.dx * sx;
-      final newTop  = to.top  + rel.dy * sy;
+      final newTop = to.top + rel.dy * sy;
 
-      final newW = (e.width  * sx).clamp(5.0, double.infinity);
+      final newW = (e.width * sx).clamp(5.0, double.infinity);
       final newH = (e.height * sy).clamp(5.0, double.infinity);
 
       upd[i] = e.copyWith(
-        offset: _clampOffset(Offset(newLeft, newTop), Size(newW, newH), widget.panelSize),
+        offset: _clampOffset(
+            Offset(newLeft, newTop), Size(newW, newH), widget.panelSize),
         width: newW,
         height: newH,
         size: Size(newW, newH),
@@ -971,24 +991,45 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
     switch (element.type) {
       case 'text':
         toolIcons = [
-          _toolIcon(id: 'color', icon: Icons.format_color_text, tooltip: 'Text Color',
+          _toolIcon(
+              id: 'color',
+              icon: Icons.format_color_text,
+              tooltip: 'Text Color',
               onTap: () => _changeTextColorById(element.id)),
-          _toolIcon(id: 'size', icon: Icons.format_size, tooltip: 'Font Size',
+          _toolIcon(
+              id: 'size',
+              icon: Icons.format_size,
+              tooltip: 'Font Size',
               onTap: () => _changeFontSizeById(element.id)),
-          _toolIcon(id: 'bold', icon: Icons.format_bold, tooltip: 'Bold',
+          _toolIcon(
+              id: 'bold',
+              icon: Icons.format_bold,
+              tooltip: 'Bold',
               onTap: () => _toggleBoldById(element.id)),
-          _toolIcon(id: 'italic', icon: Icons.format_italic, tooltip: 'Italic',
+          _toolIcon(
+              id: 'italic',
+              icon: Icons.format_italic,
+              tooltip: 'Italic',
               onTap: () => _toggleItalicById(element.id)),
-          _toolIcon(id: 'delete', icon: Icons.delete, tooltip: 'Delete',
+          _toolIcon(
+              id: 'delete',
+              icon: Icons.delete,
+              tooltip: 'Delete',
               onTap: () => _deleteElementById(element.id)),
         ];
         break;
 
       case 'image':
         toolIcons = [
-          _toolIcon(id: 'replace', icon: Icons.image_search, tooltip: 'Replace Image',
+          _toolIcon(
+              id: 'replace',
+              icon: Icons.image_search,
+              tooltip: 'Replace Image',
               onTap: () => _replaceImageById(element.id)),
-          _toolIcon(id: 'delete', icon: Icons.delete, tooltip: 'Delete',
+          _toolIcon(
+              id: 'delete',
+              icon: Icons.delete,
+              tooltip: 'Delete',
               onTap: () => _deleteElementById(element.id)),
         ];
         break;
@@ -1010,7 +1051,9 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
             decoration: BoxDecoration(
               color: Colors.white,
               borderRadius: BorderRadius.circular(8),
-              boxShadow: const [BoxShadow(color: Colors.black26, blurRadius: 4)],
+              boxShadow: const [
+                BoxShadow(color: Colors.black26, blurRadius: 4)
+              ],
             ),
             child: Column(mainAxisSize: MainAxisSize.min, children: toolIcons),
           ),
@@ -1056,16 +1099,22 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text("Pick Text Color"),
-        content: MaterialPicker(pickerColor: sel, onColorChanged: (c) => sel = c),
+        content:
+            MaterialPicker(pickerColor: sel, onColorChanged: (c) => sel = c),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text("Cancel")),
-          TextButton(onPressed: () => Navigator.pop(context, sel), child: const Text("OK")),
+          TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text("Cancel")),
+          TextButton(
+              onPressed: () => Navigator.pop(context, sel),
+              child: const Text("OK")),
         ],
       ),
     );
     if (pickedColor != null) {
       setState(() {
-        currentElements[index] = currentElements[index].copyWith(color: pickedColor);
+        currentElements[index] =
+            currentElements[index].copyWith(color: pickedColor);
       });
     }
   }
@@ -1095,8 +1144,12 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
             ),
           ),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(context), child: const Text("Cancel")),
-            TextButton(onPressed: () => Navigator.pop(context, tempSize), child: const Text("OK")),
+            TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text("Cancel")),
+            TextButton(
+                onPressed: () => Navigator.pop(context, tempSize),
+                child: const Text("OK")),
           ],
         );
       },
@@ -1104,7 +1157,8 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
 
     if (newSize != null) {
       setState(() {
-        currentElements[index] = currentElements[index].copyWith(fontSize: newSize);
+        currentElements[index] =
+            currentElements[index].copyWith(fontSize: newSize);
       });
     }
   }
@@ -1114,8 +1168,9 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
     if (index == -1) return;
     setState(() {
       final w = currentElements[index].fontWeight;
-      currentElements[index] =
-          currentElements[index].copyWith(fontWeight: (w == FontWeight.bold ? FontWeight.normal : FontWeight.bold));
+      currentElements[index] = currentElements[index].copyWith(
+          fontWeight:
+              (w == FontWeight.bold ? FontWeight.normal : FontWeight.bold));
     });
   }
 
@@ -1124,8 +1179,9 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
     if (index == -1) return;
     setState(() {
       final s = currentElements[index].fontStyle;
-      currentElements[index] =
-          currentElements[index].copyWith(fontStyle: (s == FontStyle.italic ? FontStyle.normal : FontStyle.italic));
+      currentElements[index] = currentElements[index].copyWith(
+          fontStyle:
+              (s == FontStyle.italic ? FontStyle.normal : FontStyle.italic));
     });
   }
 
@@ -1137,7 +1193,8 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
     final pickedFile = await picker.pickImage(source: ImageSource.gallery);
     if (pickedFile != null) {
       setState(() {
-        currentElements[index] = currentElements[index].copyWith(value: pickedFile.path);
+        currentElements[index] =
+            currentElements[index].copyWith(value: pickedFile.path);
       });
     }
   }
@@ -1159,7 +1216,8 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
 
     final result = await showDialog<Map<String, dynamic>>(
       context: context,
-      builder: (context) => DragSpeechBubbleEditDialog(initialData: initialData),
+      builder: (context) =>
+          DragSpeechBubbleEditDialog(initialData: initialData),
     );
     if (result == null) return;
 
@@ -1230,22 +1288,33 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
       final metaObj = jsonDecode(element.meta!);
       if (metaObj is! Map) return fallback;
 
-      if (metaObj['kind'] == 'speech_bubble_original' && metaObj['data'] != null) {
+      if (metaObj['kind'] == 'speech_bubble_original' &&
+          metaObj['data'] != null) {
         final dataMap = Map<String, dynamic>.from(metaObj['data'] as Map);
         return {
           'text': dataMap['text'],
-          'bubbleColor': _readColor(dataMap['bubbleColor'], fallback['bubbleColor']),
-          'borderColor': _readColor(dataMap['borderColor'], fallback['borderColor']),
-          'borderWidth': (dataMap['borderWidth'] as num?)?.toDouble() ?? fallback['borderWidth'],
-          'bubbleShape': _readBubbleShape(dataMap['bubbleShape']) ?? fallback['bubbleShape'],
-          'tailOffset': _readOffset(dataMap['tailOffset']) ?? fallback['tailOffset'],
-          'tailNorm': _readTailNorm(dataMap['tailNorm']) ?? fallback['tailNorm'],
-          'fontSize': (dataMap['fontSize'] as num?)?.toDouble() ?? fallback['fontSize'],
+          'bubbleColor':
+              _readColor(dataMap['bubbleColor'], fallback['bubbleColor']),
+          'borderColor':
+              _readColor(dataMap['borderColor'], fallback['borderColor']),
+          'borderWidth': (dataMap['borderWidth'] as num?)?.toDouble() ??
+              fallback['borderWidth'],
+          'bubbleShape': _readBubbleShape(dataMap['bubbleShape']) ??
+              fallback['bubbleShape'],
+          'tailOffset':
+              _readOffset(dataMap['tailOffset']) ?? fallback['tailOffset'],
+          'tailNorm':
+              _readTailNorm(dataMap['tailNorm']) ?? fallback['tailNorm'],
+          'fontSize':
+              (dataMap['fontSize'] as num?)?.toDouble() ?? fallback['fontSize'],
           'textColor': _readColor(dataMap['textColor'], fallback['textColor']),
           'fontFamily': dataMap['fontFamily'] ?? fallback['fontFamily'],
-          'fontWeight': _readFontWeight(dataMap['fontWeight']) ?? fallback['fontWeight'],
-          'fontStyle': _readFontStyle(dataMap['fontStyle']) ?? fallback['fontStyle'],
-          'padding': (dataMap['padding'] as num?)?.toDouble() ?? fallback['padding'],
+          'fontWeight':
+              _readFontWeight(dataMap['fontWeight']) ?? fallback['fontWeight'],
+          'fontStyle':
+              _readFontStyle(dataMap['fontStyle']) ?? fallback['fontStyle'],
+          'padding':
+              (dataMap['padding'] as num?)?.toDouble() ?? fallback['padding'],
           'width': element.width,
           'height': element.height,
         };
@@ -1283,8 +1352,10 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
     if (v is DragBubbleShape) return v;
     if (v is String) {
       switch (v) {
-        case 'rectangle': return DragBubbleShape.rectangle;
-        case 'shout': return DragBubbleShape.shout;
+        case 'rectangle':
+          return DragBubbleShape.rectangle;
+        case 'shout':
+          return DragBubbleShape.shout;
       }
     }
     return null;
@@ -1294,17 +1365,28 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
     if (v is FontWeight) return v;
     if (v is String) {
       switch (v) {
-        case 'w100': return FontWeight.w100;
-        case 'w200': return FontWeight.w200;
-        case 'w300': return FontWeight.w300;
-        case 'w400': return FontWeight.w400;
-        case 'w500': return FontWeight.w500;
-        case 'w600': return FontWeight.w600;
-        case 'w700': return FontWeight.w700;
-        case 'w800': return FontWeight.w800;
-        case 'w900': return FontWeight.w900;
-        case 'normal': return FontWeight.normal;
-        case 'bold': return FontWeight.bold;
+        case 'w100':
+          return FontWeight.w100;
+        case 'w200':
+          return FontWeight.w200;
+        case 'w300':
+          return FontWeight.w300;
+        case 'w400':
+          return FontWeight.w400;
+        case 'w500':
+          return FontWeight.w500;
+        case 'w600':
+          return FontWeight.w600;
+        case 'w700':
+          return FontWeight.w700;
+        case 'w800':
+          return FontWeight.w800;
+        case 'w900':
+          return FontWeight.w900;
+        case 'normal':
+          return FontWeight.normal;
+        case 'bold':
+          return FontWeight.bold;
       }
     }
     return null;
@@ -1314,8 +1396,10 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
     if (v is FontStyle) return v;
     if (v is String) {
       switch (v) {
-        case 'normal': return FontStyle.normal;
-        case 'italic': return FontStyle.italic;
+        case 'normal':
+          return FontStyle.normal;
+        case 'italic':
+          return FontStyle.italic;
       }
     }
     return null;
@@ -1426,7 +1510,8 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
       width: width,
       height: height,
       size: Size(width, height),
-      meta: jsonEncode({'kind': 'speech_bubble_original', 'data': bubbleData.toMap()}),
+      meta: jsonEncode(
+          {'kind': 'speech_bubble_original', 'data': bubbleData.toMap()}),
     );
 
     _addNewElement(newElement);
@@ -1434,10 +1519,11 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
 
   Future<Uint8List?> _capturePanelAsImage() async {
     try {
-      RenderRepaintBoundary boundary =
-      _panelContentKey.currentContext!.findRenderObject() as RenderRepaintBoundary;
+      RenderRepaintBoundary boundary = _panelContentKey.currentContext!
+          .findRenderObject() as RenderRepaintBoundary;
       ui.Image image = await boundary.toImage(pixelRatio: 2.0);
-      ByteData? byteData = await image.toByteData(format: ui.ImageByteFormat.png);
+      ByteData? byteData =
+          await image.toByteData(format: ui.ImageByteFormat.png);
       return byteData?.buffer.asUint8List();
     } catch (e) {
       debugPrint('Error capturing panel image: $e');
@@ -1457,14 +1543,18 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
           decoration: BoxDecoration(
             color: Colors.white,
             borderRadius: BorderRadius.circular(30),
-            boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 10, offset: Offset(0, 4))],
+            boxShadow: const [
+              BoxShadow(
+                  color: Colors.black12, blurRadius: 10, offset: Offset(0, 4))
+            ],
           ),
           child: SingleChildScrollView(
             scrollDirection: Axis.horizontal,
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                _toolNavButton(Icons.format_color_fill, 'BG', _pickBackgroundColor),
+                _toolNavButton(
+                    Icons.format_color_fill, 'BG', _pickBackgroundColor),
                 _toolNavButton(Icons.image, 'Image', _uploadImage),
                 _toolNavButton(Icons.face, 'Character', () async {
                   final result = await showDialog<Map<String, dynamic>>(
@@ -1479,7 +1569,8 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
                     }
                   }
                 }),
-                _toolNavButton(Icons.chat_bubble, 'Speech Bubble', _addSpeechBubble),
+                _toolNavButton(
+                    Icons.chat_bubble, 'Speech Bubble', _addSpeechBubble),
                 _toolNavButton(Icons.text_fields, 'Text', _addTextBox),
                 _toolNavButton(Icons.draw, 'Draw', () {
                   setState(() => isDrawing = true);
@@ -1503,7 +1594,8 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
           children: [
             Icon(icon, size: 24, color: Colors.black87),
             const SizedBox(height: 4),
-            Text(label, style: const TextStyle(fontSize: 12, color: Colors.black87)),
+            Text(label,
+                style: const TextStyle(fontSize: 12, color: Colors.black87)),
           ],
         ),
       ),
@@ -1526,8 +1618,10 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
             currentColor: drawSelectedColor,
             currentBrushSize: selectedBrushSize,
             onToolChanged: (tool) => setState(() => currentTool = tool),
-            onColorChanged: (color) => setState(() => drawSelectedColor = color),
-            onBrushSizeChanged: (size) => setState(() => selectedBrushSize = size),
+            onColorChanged: (color) =>
+                setState(() => drawSelectedColor = color),
+            onBrushSizeChanged: (size) =>
+                setState(() => selectedBrushSize = size),
             onUndo: () {},
             onClearAll: () {},
             onClose: () => Navigator.of(context).pop(),
@@ -1550,8 +1644,12 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
           ),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text("Cancel")),
-          TextButton(onPressed: () => Navigator.of(context).pop(tempColor), child: const Text("Select")),
+          TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text("Cancel")),
+          TextButton(
+              onPressed: () => Navigator.of(context).pop(tempColor),
+              child: const Text("Select")),
         ],
       ),
     );
@@ -1654,7 +1752,8 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
     final boundingHeight = (maxY - minY).clamp(10.0, double.infinity);
 
     final normalizedPoints = points.map((p) => p - Offset(minX, minY)).toList();
-    final drawingData = normalizedPoints.map((e) => '${e.dx},${e.dy}').join(';');
+    final drawingData =
+        normalizedPoints.map((e) => '${e.dx},${e.dy}').join(';');
 
     final newElement = PanelElementModel(
       id: DateTime.now().millisecondsSinceEpoch.toString(),
@@ -1687,12 +1786,15 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
   }
 
   Offset _clampOffset(Offset desired, Size elSize, Size canvas) {
-    final dx = desired.dx.clamp(0.0, (canvas.width - elSize.width).clamp(0.0, double.infinity));
-    final dy = desired.dy.clamp(0.0, (canvas.height - elSize.height).clamp(0.0, double.infinity));
+    final dx = desired.dx
+        .clamp(0.0, (canvas.width - elSize.width).clamp(0.0, double.infinity));
+    final dy = desired.dy.clamp(
+        0.0, (canvas.height - elSize.height).clamp(0.0, double.infinity));
     return Offset(dx, dy);
   }
 
-  PanelElementModel _deepCloneElement(PanelElementModel e, {Offset? offsetOverride}) {
+  PanelElementModel _deepCloneElement(PanelElementModel e,
+      {Offset? offsetOverride}) {
     final cloned = e.copyWith(
       id: DateTime.now().millisecondsSinceEpoch.toString(),
       offset: offsetOverride ?? (e.offset + const Offset(12, 12)),
@@ -1752,7 +1854,9 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Panel saved successfully!'), duration: Duration(seconds: 1)),
+          const SnackBar(
+              content: Text('Panel saved successfully!'),
+              duration: Duration(seconds: 1)),
         );
       }
       await Future.delayed(const Duration(milliseconds: 500));
@@ -1780,7 +1884,7 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
 
   Widget _buildPanelOverflowMenu() {
     final String multiLabel =
-    _multiSelectMode ? 'Exit Multi-select' : 'Multi-select';
+        _multiSelectMode ? 'Exit Multi-select' : 'Multi-select';
 
     return PopupMenuButton<_PanelMenuAction>(
       tooltip: 'More',
@@ -1842,6 +1946,7 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
             if (keep != null) _selected.add(keep);
           }
         });
+        _resetGroupOverlayRect(); // keep overlay in sync with selection mode
         break;
 
       case _PanelMenuAction.group:
@@ -1849,7 +1954,10 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
         break;
 
       case _PanelMenuAction.ungroup:
-        if (_hasSelection) _ungroupSelected();
+        if (_hasSelection) {
+          _ungroupSelected();            //  no change to _multiSelectMode here
+          _resetGroupOverlayRect();
+        }
         break;
 
       case _PanelMenuAction.copy:
@@ -1859,7 +1967,7 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
       case _PanelMenuAction.paste:
         _pasteSelection();
         break;
-        case _PanelMenuAction.delete:
+      case _PanelMenuAction.delete:
         if (_hasSelection) _deleteSelection();
         break;
     }
@@ -1875,7 +1983,29 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
         Text(text, style: const TextStyle(color: Colors.black87)),
       ],
     );
-  }}
+  }
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 /*class PanelEditScreen extends StatefulWidget {
@@ -2046,15 +2176,15 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
           Column(
             children: [
               // Panel Canvas Area
-*//*
+*/ /*
               Expanded(
                 child: Center(
                   // ensures it's centered if there's padding/margin
                   child: AspectRatio(
-*//*
-*//*
+*/ /*
+*/ /*
                     aspectRatio: aspectRatio,
-*//* *//*
+*/ /* */ /*
 
                     aspectRatio: w / h, // lock aspect
                     // or 4 / 3 or any other fixed ratio
@@ -2099,7 +2229,7 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
                   ),
                 ),
               ),
-*//*
+*/ /*
               Expanded(
                 child: Center(
                   child: AspectRatio(
@@ -2170,7 +2300,7 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
   Widget _buildElementWidget(PanelElementModel element, int index) {
     Widget child;
     switch (element.type) {
-*//*      case 'character':
+*/ /*      case 'character':
       case 'clipart':
         final isSvg = element.value.toLowerCase().endsWith('.svg');
         final box = SizedBox(
@@ -2218,7 +2348,7 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
               child: box,
             ),
           );
-        }*//*
+        }*/ /*
 
       case 'character':
       case 'clipart':
@@ -2263,7 +2393,7 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
         );
         break;
 
-      *//* case 'speech_bubble':
+      */ /* case 'speech_bubble':
         final isSelected = selectedElementIndex == index;
         final decoratedChild = Container(
           decoration: BoxDecoration(
@@ -2316,7 +2446,7 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
               child: _buildSpeechBubble(element),
             ),
           );
-        }*//*
+        }*/ /*
 
       // In your element switch:
       case 'speech_bubble':
@@ -2581,7 +2711,7 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
 
       case 'image':
         toolIcons = [
-          *//*_toolIcon(
+          */ /*_toolIcon(
             id: 'rotate',
             icon: Icons.rotate_right,
             tooltip: 'Rotate 90°',
@@ -2594,8 +2724,8 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
                 );
               });
             },
-          ),*//*
-          *//*   _toolIcon(
+          ),*/ /*
+          */ /*   _toolIcon(
             id: 'flipX',
             icon: Icons.flip,
             tooltip: 'Flip Horizontal',
@@ -2608,8 +2738,8 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
                 );
               });
             },
-          ),*//*
-          *//* _toolIcon(
+          ),*/ /*
+          */ /* _toolIcon(
             id: 'flipY',
             icon: Icons.flip_camera_android,
             tooltip: 'Flip Vertical',
@@ -2622,13 +2752,13 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
                 );
               });
             },
-          ),*//*
-          *//* _toolIcon(
+          ),*/ /*
+          */ /* _toolIcon(
             id: 'crop',
             icon: Icons.crop,
             tooltip: 'Crop Image',
             onTap: () => _cropImageById(element.id),
-          ),*//*
+          ),*/ /*
           _toolIcon(
             id: 'replace',
             icon: Icons.image_search,
@@ -2958,7 +3088,7 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
   }
 
 
-*//*
+*/ /*
   void _editSpeechBubble(int index) async {
     final element = currentElements[index];
 
@@ -3004,7 +3134,7 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
 
     }
   }
-*//*
+*/ /*
 
   /// ===== Edit flow: open dialog with original vector data and save new PNG + vector =====
   Future<void> _editSpeechBubble(int index) async {
@@ -3229,7 +3359,7 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
     return null;
   }
 
-*//*
+*/ /*
   void _editSpeechBubble(int index) async {
     final element = currentElements[index];
 
@@ -3273,7 +3403,7 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
       });
     }
   }
-*//*
+*/ /*
 
   void _editTextElement(int index) async {
     final element = currentElements[index];
@@ -3377,7 +3507,7 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
     _addNewElement(newElement);
   }
 
-*//*  void _addSpeechBubble() async {
+*/ /*  void _addSpeechBubble() async {
     final result = await showDialog<Map<String, dynamic>>(
       context: context,
       builder: (context) => DragSpeechBubbleEditDialog(
@@ -3425,7 +3555,7 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
 
       _addNewElement(newElement);
     }
-  }*//*
+  }*/ /*
 
   Future<Uint8List?> _capturePanelAsImage() async {
     try {
@@ -3469,20 +3599,20 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
                 _toolNavButton(
                     Icons.format_color_fill, 'BG', _pickBackgroundColor),
                 _toolNavButton(Icons.image, 'Image', _uploadImage),
-                *//* _toolNavButton(Icons.face, 'Character', () async {
+                */ /* _toolNavButton(Icons.face, 'Character', () async {
                   final selected = await showCharacterPicker(context);
                   if (selected != null) {
                     _addCharacterAsset(selected); // You will implement this
                   }
-                }),*//*
+                }),*/ /*
 
-*//*
+*/ /*
                 _toolNavButton(Icons.insert_emoticon, 'Clipart', () async {
                   final result = await showCharacterAndClipartPicker(context);
                   if (result != null && result['type'] == 'character') {
                     _addCharacterEmoji(result['value']);
                   }
-                }),*//*
+                }),*/ /*
                 _toolNavButton(Icons.face, 'Character', () async {
                   final result = await showDialog<Map<String, dynamic>>(
                     context: context,
@@ -3661,7 +3791,7 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
     _addNewElement(newElement);
   }
 
-*//*  void _addCharacterAsset(String imagePath) {
+*/ /*  void _addCharacterAsset(String imagePath) {
     final characterElement = PanelElementModel(
       id: DateTime.now().millisecondsSinceEpoch.toString(),
       type: 'character',
@@ -3672,9 +3802,9 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
       size: Size(100, 100),
     );
     _addNewElement(characterElement);
-  }*//*
+  }*/ /*
 
-  *//*void _addClipArt(IconData selectedIcon) {
+  */ /*void _addClipArt(IconData selectedIcon) {
     final newElement = PanelElementModel(
       id: DateTime.now().millisecondsSinceEpoch.toString(),
       type: 'clipart',
@@ -3687,7 +3817,7 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
       color: Colors.black,
     );
     _addNewElement(newElement);
-  }*//*
+  }*/ /*
   void _addCharacterAsset(String assetPath) {
     final el = PanelElementModel(
       id: DateTime.now().millisecondsSinceEpoch.toString(),
@@ -3823,7 +3953,7 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
     }
   }
 
-*//*  Future<Map<String, dynamic>?> showCharacterAndClipartPicker(
+*/ /*  Future<Map<String, dynamic>?> showCharacterAndClipartPicker(
       BuildContext context) async {
     return showDialog<Map<String, dynamic>>(
       context: context,
@@ -3831,7 +3961,7 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
         return CharacterClipartPickerDialog();
       },
     );
-  }*//*
+  }*/ /*
   Future<String?> showCharacterPicker(BuildContext context) async {
     final characters = [
       'assets/characters/ic_super_hero_1.png',
