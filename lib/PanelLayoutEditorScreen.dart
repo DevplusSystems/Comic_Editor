@@ -1129,10 +1129,8 @@ class _PanelLayoutEditorScreenState extends State<PanelLayoutEditorScreen>
   void _editSelectedPanel() async {
     if (selectedPanel == null) return;
     final actualPanel =
-        pages[_currentPage].firstWhere((p) => p.id == selectedPanel!.id);
-    for (int i = 0; i < actualPanel.elements.length; i++) {
-      final element = actualPanel.elements[i];
-    }
+    pages[_currentPage].firstWhere((p) => p.id == selectedPanel!.id);
+
     final panelForEditing = actualPanel.toComicPanel();
 
     final updatedPanel = await Navigator.push<ComicPanel>(
@@ -1141,7 +1139,80 @@ class _PanelLayoutEditorScreenState extends State<PanelLayoutEditorScreen>
         builder: (context) => PanelEditScreen(
           panel: panelForEditing,
           panelOffset: Offset(actualPanel.x, actualPanel.y),
-          panelSize: Size(actualPanel.width, actualPanel.height), // pass size
+          panelSize: Size(actualPanel.width, actualPanel.height),
+          onAutosave: (p) {
+            // 🔴 IMPORTANT: write-through to your project model on every autosave
+            _mutate(() {
+              final index = pages[_currentPage]
+                  .indexWhere((pl) => pl.id == actualPanel.id);
+              if (index != -1) {
+                pages[_currentPage][index] =
+                    actualPanel.updateFromComicPanel(p);
+                selectedPanel = pages[_currentPage][index];
+
+                final updatedPages =
+                List<List<LayoutPanel>>.from(currentProject.pages);
+                updatedPages[_currentPage] =
+                List<LayoutPanel>.from(pages[_currentPage]);
+
+                currentProject = currentProject.copyWith(
+                  pages: updatedPages,
+                  lastModified: DateTime.now(),
+                );
+              }
+            });
+          },
+        ),
+      ),
+    );
+
+    // User tapped Save: also apply final returned panel
+    if (updatedPanel != null) {
+      _mutate(() {
+        final index = pages[_currentPage]
+            .indexWhere((p) => p.id == selectedPanel!.id);
+        if (index != -1) {
+          pages[_currentPage][index] =
+              actualPanel.updateFromComicPanel(updatedPanel);
+          selectedPanel = pages[_currentPage][index];
+
+          final updatedPages =
+          List<List<LayoutPanel>>.from(currentProject.pages);
+          updatedPages[_currentPage] =
+          List<LayoutPanel>.from(pages[_currentPage]);
+
+          currentProject = currentProject.copyWith(
+            pages: updatedPages,
+            lastModified: DateTime.now(),
+          );
+        }
+      });
+    }
+  }
+
+
+/*
+  void _editSelectedPanel() async {
+    if (selectedPanel == null) return;
+    final actualPanel =
+        pages[_currentPage].firstWhere((p) => p.id == selectedPanel!.id);
+    for (int i = 0; i < actualPanel.elements.length; i++) {
+      final element = actualPanel.elements[i];
+    }
+    var panelForEditing = actualPanel.toComicPanel();
+
+    final updatedPanel = await Navigator.push<ComicPanel>(
+      context,
+      MaterialPageRoute(
+        builder: (context) => PanelEditScreen(
+          panel: panelForEditing,
+          panelOffset: Offset(actualPanel.x, actualPanel.y),
+          panelSize: Size(actualPanel.width, actualPanel.height),
+          onAutosave: (p) {
+            setState(() => panelForEditing = p);          // keep parent model in sync
+            // also persist to your DB if you have one
+            // await repo.save(p);
+          },
         ),
       ),
     );
@@ -1167,6 +1238,7 @@ class _PanelLayoutEditorScreenState extends State<PanelLayoutEditorScreen>
       });
     }
   }
+*/
 
   void _saveAsDraft() async {
     final box = Hive.box<ProjectHiveModel>('drafts');

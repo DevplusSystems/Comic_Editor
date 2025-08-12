@@ -27,8 +27,10 @@ import 'TextEditorDialog/TextEditDialog.dart';
 import 'dart:math' as math;
 
 // Menu actions
-enum _PanelMenuAction { toggleMultiSelect, group, ungroup, copy, paste ,delete}
+enum _PanelMenuAction { toggleMultiSelect, group, ungroup, copy, paste, delete }
+
 bool get _canPaste => true; // or: clipboardElements.isNotEmpty;
+
 class _Snap {
   final int index;
   final Offset offset;
@@ -36,16 +38,21 @@ class _Snap {
 
   const _Snap(this.index, this.offset, this.w, this.h);
 }
+
 class PanelEditScreen extends StatefulWidget {
   final ComicPanel panel;
   final Offset panelOffset;
   final Size panelSize;
+
+  // NEW: optional autosave notify
+  final ValueChanged<ComicPanel>? onAutosave;
 
   const PanelEditScreen({
     super.key,
     required this.panel,
     required this.panelOffset,
     required this.panelSize,
+    this.onAutosave,
   });
 
   @override
@@ -73,10 +80,10 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
   double aspectRatio = 3 / 4;
 
   // === NEW: multi-select & grouping ===
-  final Set<int> _selected = {};             // indices into currentElements
+  final Set<int> _selected = {}; // indices into currentElements
   bool _multiSelectMode = false;
-  Rect? _lastGroupRect;                      // last overlay rect during drag
-  List<PanelElementModel>? _clipboardList;   // multi-copy clipboard
+  Rect? _lastGroupRect; // last overlay rect during drag
+  List<PanelElementModel>? _clipboardList; // multi-copy clipboard
 
   // Clipboard & focus you already had
   PanelElementModel? _clipboard; // kept if you use elsewhere
@@ -85,20 +92,83 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
 
   // === Convenience getters for single vs multi selection
   bool get _hasSelection => _selected.isNotEmpty;
+
   bool get _hasMultiSelection => _selected.length > 1;
-  int? get _singleSelectedIndex => _selected.length == 1 ? _selected.first : null;
+
+  int? get _singleSelectedIndex =>
+      _selected.length == 1 ? _selected.first : null;
 
   // === Group overlay control ===
   final GlobalKey<ResizableDraggableState> _groupOverlayKey =
-  GlobalKey<ResizableDraggableState>();
+      GlobalKey<ResizableDraggableState>();
 
-  static const double _kResizeEps = 0.75; // px threshold to ignore tiny size jitter
+  static const double _kResizeEps =
+      0.75; // px threshold to ignore tiny size jitter
 
 // Resize session (baseline snapshot so we don't accumulate error)
   Rect? _resizeBaseRect;
   bool _resizing = false;
 
   List<_Snap> _resizeSnap = [];
+
+  // ===== Layer panel (visibility/lock/reorder) =====
+  bool _showLayerPanel = false;
+  final Map<String, bool> _hiddenById = {}; // id -> hidden?
+  final Map<String, bool> _lockedById = {}; // id -> locked?
+
+  bool _isHiddenIdx(int i) => _hiddenById[currentElements[i].id] ?? false;
+
+  bool _isLockedIdx(int i) => _lockedById[currentElements[i].id] ?? false;
+
+
+  // ===== Unlocked selection
+
+  Iterable<int> get _selectedUnlocked =>
+      _selected.where((i) => !_isLockedIdx(i));
+
+  bool get _hasUnlockedSelection => _selectedUnlocked.isNotEmpty;
+  bool get _hasMultiUnlocked => _selectedUnlocked.length > 1;
+  // ===== Unlocked selection
+
+
+// inside _PanelEditScreenState:
+  Map<String, dynamic> _safeMetaMap(String? meta) {
+    if (meta == null || meta.isEmpty) return {};
+    try {
+      final m = jsonDecode(meta);
+      if (m is Map<String, dynamic>) return m;
+    } catch (_) {}
+    return {};
+  }
+
+  bool _metaGetHidden(Map<String, dynamic> m) {
+    final flags = m['flags'];
+    if (flags is Map) {
+      final v = flags['hidden'];
+      if (v is bool) return v;
+    }
+    final top = m['hidden'];
+    if (top is bool) return top;
+    return false;
+  }
+
+  String _metaSetHidden(Map<String, dynamic> m, bool hidden) {
+    final flags = Map<String, dynamic>.from(m['flags'] as Map? ?? {});
+    flags['hidden'] = hidden;
+    m['flags'] = flags;
+    return jsonEncode(m);
+  }
+
+  bool _readHiddenFlag(PanelElementModel e) {
+    return _metaGetHidden(_safeMetaMap(e.meta));
+  }
+
+  PanelElementModel _withHiddenFlag(PanelElementModel e, bool hidden) {
+    final map = _safeMetaMap(e.meta);
+    final metaStr = _metaSetHidden(map, hidden);
+    return e.copyWith(meta: metaStr);
+  }
+
 
 
   @override
@@ -112,8 +182,12 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
 
   void _initializeElements() {
     elementKeys.clear();
-    for (int i = 0; i < currentElements.length; i++) {
+    for (final e in currentElements) {
       elementKeys.add(GlobalKey<ResizableDraggableState>());
+      _lockedById.putIfAbsent(e.id, () => false);
+      _hiddenById.putIfAbsent(e.id, () => _readHiddenFlag(e)); // <-- was false
+
+
     }
   }
 
@@ -164,7 +238,7 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
   }
 
   // === copy/paste multi
-  void _copySelection() {
+  /*void _copySelection() {
     if (!_hasSelection) return;
     _clipboardList = _selected
         .map((i) => _deepCloneElement(currentElements[i]))
@@ -179,7 +253,24 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
         ),
       ),
     );
+  }*/
+  void _copySelection() {
+    final sel = _selectedUnlocked.toList();
+    if (sel.isEmpty) return;
+    _clipboardList =
+        sel.map((i) => _deepCloneElement(currentElements[i])).toList(growable: false);
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          _clipboardList!.length > 1
+              ? 'Copied ${_clipboardList!.length} elements'
+              : 'Copied',
+        ),
+      ),
+    );
   }
+
 
   void _pasteSelection() {
     if (_clipboardList == null || _clipboardList!.isEmpty) {
@@ -201,7 +292,8 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
     final newOnes = <PanelElementModel>[];
     for (final e in list) {
       final rel = e.offset - Offset(minL, minT);
-      final pos = _clampOffset(base + rel, Size(e.width, e.height), widget.panelSize);
+      final pos =
+          _clampOffset(base + rel, Size(e.width, e.height), widget.panelSize);
       newOnes.add(_deepCloneElement(e, offsetOverride: pos));
     }
 
@@ -220,7 +312,7 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
     });
   }
 
-  void _deleteSelection() {
+/*  void _deleteSelection() {
     if (!_hasSelection) return;
     final toDelete = _selected.toList()..sort();
     setState(() {
@@ -231,7 +323,20 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
       }
       _selected.clear();
     });
+  }*/
+  void _deleteSelection() {
+    if (!_hasUnlockedSelection) return;
+    final toDelete = _selectedUnlocked.toList()..sort();
+    setState(() {
+      for (int n = toDelete.length - 1; n >= 0; n--) {
+        final idx = toDelete[n];
+        currentElements.removeAt(idx);
+        elementKeys.removeAt(idx);
+      }
+      _selected.clear();
+    });
   }
+
 
   // ====== UI ======
 
@@ -239,15 +344,16 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
   Widget build(BuildContext context) {
     final w = widget.panelSize.width;
     final h = widget.panelSize.height;
-
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Edit Panel'),
-        backgroundColor: Colors.blue.shade400,
-        foregroundColor: Colors.white,
-        actions: [
-          // Toggle multi-select
-          /* IconButton(
+    return WillPopScope(
+      onWillPop: _onWillPop, // <— NEW
+      child: Scaffold(
+        appBar: AppBar(
+          title: const Text('Edit Panel'),
+          backgroundColor: Colors.blue.shade400,
+          foregroundColor: Colors.white,
+          actions: [
+            // Toggle multi-select
+            /* IconButton(
             tooltip: _multiSelectMode ? 'Exit Multi-select' : 'Multi-select',
             icon: Icon(_multiSelectMode ? Icons.check_box : Icons.check_box_outline_blank),
             onPressed: () {
@@ -263,7 +369,7 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
             },
           ),*/
 
-          /* // Group / Ungroup
+            /* // Group / Ungroup
           IconButton(
             tooltip: 'Group',
             icon: const Icon(Icons.merge_type),
@@ -275,99 +381,117 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
             onPressed: _hasSelection ? _ungroupSelected : null,
           ),*/
 
-          /* // Copy / Paste now support multi
+            /* // Copy / Paste now support multi
           IconButton(icon: const Icon(Icons.copy), onPressed: _copySelection),
           IconButton(icon: const Icon(Icons.content_paste), onPressed: _pasteSelection),
 */
-          // Quick undo: remove last element (kept from yours)
-          IconButton(
-            icon: const Icon(Icons.undo),
-            onPressed: _isSaving
-                ? null
-                : () {
-                    if (currentElements.isNotEmpty && elementKeys.isNotEmpty) {
-                      setState(() {
-                        currentElements.removeLast();
-                        elementKeys.removeLast();
-                        _clearSelection();
-                      });
-                    }
-                  },
-          ),
-          ElevatedButton(
-            onPressed: _isSaving ? null : _savePanel,
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.green,
-              foregroundColor: Colors.white,
+            // Quick undo: remove last element (kept from yours)
+
+            IconButton(
+              tooltip: _showLayerPanel ? 'Hide Layers' : 'Layers',
+              icon: Icon(Icons.layers,
+                  color: _showLayerPanel ? Colors.amberAccent : Colors.white),
+              onPressed: () =>
+                  setState(() => _showLayerPanel = !_showLayerPanel),
             ),
-            child: _isSaving
-                ? const SizedBox(
-                    width: 16,
-                    height: 16,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                    ),
-                  )
-                : const Text('Save Panel'),
-          ),
-          const SizedBox(width: 8),
 
-          _buildPanelOverflowMenu(),
-        ],
-      ),
-      body: Stack(
-        clipBehavior: Clip.hardEdge,
-        children: [
-          Column(
-            children: [
-              Expanded(
-                child: Center(
-                  child: AspectRatio(
-                    aspectRatio: w / h,
-                    child: Container(
-                      margin: const EdgeInsets.symmetric(
-                          horizontal: 16, vertical: 10),
-                      decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(10)),
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(20),
-                        child: RepaintBoundary(
-                          key: _panelContentKey,
-                          child: Container(
-                            color: _selectedBackgroundColor,
-                            child: Stack(
-                              clipBehavior: Clip.hardEdge,
-                              children: [
-                                if (_isEditing)
-                                  CustomPaint(
-                                      size: Size.infinite,
-                                      painter: GridPainter()),
-                                if (isDrawing)
-                                  Positioned.fill(
-                                    child: DrawingCanvas(
-                                      tool: currentTool,
-                                      brushSize: selectedBrushSize,
-                                      color: drawSelectedColor,
-                                      onDrawingComplete: _onDrawingComplete,
+            IconButton(
+              icon: const Icon(Icons.undo),
+              onPressed: _isSaving
+                  ? null
+                  : () {
+                      if (currentElements.isNotEmpty &&
+                          elementKeys.isNotEmpty) {
+                        setState(() {
+                          currentElements.removeLast();
+                          elementKeys.removeLast();
+                          _clearSelection();
+                        });
+                      }
+                    },
+            ),
+            ElevatedButton(
+              onPressed: _isSaving ? null : _savePanel,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.green,
+                foregroundColor: Colors.white,
+              ),
+              child: _isSaving
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                      ),
+                    )
+                  : const Text('Save Panel'),
+            ),
+            const SizedBox(width: 8),
+
+            _buildPanelOverflowMenu(),
+          ],
+        ),
+        body: Stack(
+          clipBehavior: Clip.hardEdge,
+          children: [
+            Column(
+              children: [
+                Expanded(
+                  child: Center(
+                    child: AspectRatio(
+                      aspectRatio: w / h,
+                      child: Container(
+                        margin: const EdgeInsets.symmetric(
+                            horizontal: 16, vertical: 10),
+                        decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(10)),
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(20),
+                          child: RepaintBoundary(
+                            key: _panelContentKey,
+                            child: Container(
+                              color: _selectedBackgroundColor,
+                              child: Stack(
+                                clipBehavior: Clip.hardEdge,
+                                children: [
+                                  if (_isEditing)
+                                    CustomPaint(
+                                        size: Size.infinite,
+                                        painter: GridPainter()),
+                                  if (isDrawing)
+                                    Positioned.fill(
+                                      child: DrawingCanvas(
+                                        tool: currentTool,
+                                        brushSize: selectedBrushSize,
+                                        color: drawSelectedColor,
+                                        onDrawingComplete: _onDrawingComplete,
+                                      ),
                                     ),
-                                  ),
-                                for (int i = 0; i < currentElements.length; i++)
-                                  _buildElementWidget(currentElements[i], i),
+                                  for (int i = 0;
+                                      i < currentElements.length;
+                                      i++)
+                                    _buildElementWidget(currentElements[i], i),
 
-                                if (currentElements.isEmpty)
-                                  const Center(
-                                    child: Text(
-                                      'No elements added yet.\nUse the tools below to add content.',
-                                      textAlign: TextAlign.center,
-                                      style: TextStyle(
-                                          fontSize: 16, color: Colors.grey),
+                                  if (currentElements.isEmpty)
+                                    const Center(
+                                      child: Text(
+                                        'No elements added yet.\nUse the tools below to add content.',
+                                        textAlign: TextAlign.center,
+                                        style: TextStyle(
+                                            fontSize: 16, color: Colors.grey),
+                                      ),
                                     ),
-                                  ),
 
-                                // === NEW: group overlay (shows only when multiple are selected)
-                                if (_hasMultiSelection) _buildGroupOverlay(),
-                              ],
+                                  // === NEW: group overlay (shows only when multiple are selected)
+/*
+                                  if (_hasMultiSelection) _buildGroupOverlay(),
+*/
+                                  if (_hasMultiUnlocked) _buildGroupOverlay(),
+
+
+                                ],
+                              ),
                             ),
                           ),
                         ),
@@ -375,23 +499,61 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
                     ),
                   ),
                 ),
-              ),
 
-              // Footer toolbar
-              _buildToolOptions(),
-            ],
-          ),
+                // Footer toolbar
+                _buildToolOptions(),
+              ],
+            ),
 
-          // Floating toolbox for single selection only
-          if (_singleSelectedIndex != null)
-            _buildFloatingToolbox(currentElements[_singleSelectedIndex!]),
-        ],
+            // Floating toolbox for single selection only
+            if (_singleSelectedIndex != null)
+              _buildFloatingToolbox(currentElements[_singleSelectedIndex!]),
+
+            if (_showLayerPanel) _buildLayerEditorPanel(),
+          ],
+        ),
       ),
     );
   }
 
+
+  Future<bool> _onWillPop() async {
+    final updated = <PanelElementModel>[];
+    for (int i = 0; i < currentElements.length; i++) {
+      final st = elementKeys[i].currentState;
+      if (st != null) {
+        updated.add(currentElements[i].copyWith(
+          offset: st.position,
+          size: st.size,
+          width: st.size.width,
+          height: st.size.height,
+        ));
+      } else {
+        updated.add(currentElements[i]);
+      }
+    }
+
+    var updatedPanel = panel.copyWith(
+      elements: updated,
+      backgroundColor: _selectedBackgroundColor,
+    );
+
+    // optional: quick preview refresh
+    try {
+      final img = await _capturePanelAsImage();
+      updatedPanel = updatedPanel.copyWith(previewImage: img);
+    } catch (_) {}
+
+    widget.onAutosave?.call(updatedPanel);      // notify parent
+    Navigator.pop(context, updatedPanel);       // return updated panel
+    return false; // prevent default pop (we already popped)
+  }
+
+
   /// Build each element with selection logic updated for multi-select / grouping
   Widget _buildElementWidget(PanelElementModel element, int index) {
+    if (_isHiddenIdx(index)) return const SizedBox.shrink();
+
     Widget child;
 
     switch (element.type) {
@@ -450,58 +612,71 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
           );
 
           if (_isEditing) {
-            return ResizableDraggable(
-              key: elementKeys[index],
-              isSelected: isSelected,
-              size: Size(element.width, element.height),
-              initialTop: element.offset.dy,
-              initialLeft: element.offset.dx,
-              minWidth: 10,
-              minHeight: 10,
-              onPositionChanged: (pos, size) {
-                if (!mounted) return;
-                setState(() {
-                  currentElements[index] = currentElements[index].copyWith(
-                    offset: pos,
-                    size: size,
-                    width: size.width,
-                    height: size.height,
-                  );
-                });
-              },
-              child: GestureDetector(
-                onTapDown: (d) => _lastTapLocal = d.localPosition,
-                onTap: () {
-                  final el = currentElements[index];
-                  if (!_multiSelectMode && el.groupId != null) {
-                    final gid = el.groupId;
-                    final indices = <int>[];
-                    for (int i = 0; i < currentElements.length; i++) {
-                      if (currentElements[i].groupId == gid) indices.add(i);
-                    }
-                    setState(() {
-                      _selected
-                        ..clear()
-                        ..addAll(indices);
-                    });
-                  } else if (_multiSelectMode) {
-                    _toggleSelect(index);
-                  } else {
-                    _selectOnly(index);
-                  }
+            final locked = _isLockedIdx(index);
+            if (locked) {
+              // Fixed, non-interactive
+              return Positioned(
+                top: element.offset.dy,
+                left: element.offset.dx,
+                child: SizedBox(
+                  width: element.width,
+                  height: element.height,
+                  child: decorated,
+                ),
+              );
+            } else {
+              // Interactive
+              return ResizableDraggable(
+                key: elementKeys[index],
+                isSelected: isSelected,
+                size: Size(element.width, element.height),
+                initialTop: element.offset.dy,
+                initialLeft: element.offset.dx,
+                minWidth: 10,
+                minHeight: 10,
+                onPositionChanged: (pos, size) {
+                  if (!mounted) return;
+                  setState(() {
+                    currentElements[index] = currentElements[index].copyWith(
+                      offset: pos,
+                      size: size,
+                      width: size.width,
+                      height: size.height,
+                    );
+                  });
                 },
-                onDoubleTap: () => _editElement(index),
-                child: decorated,
-              ),
-            );
+                child: GestureDetector(
+                  onTapDown: (d) => _lastTapLocal = d.localPosition,
+                  onTap: () {
+                    final el = currentElements[index];
+                    if (!_multiSelectMode && el.groupId != null) {
+                      final gid = el.groupId;
+                      final indices = <int>[];
+                      for (int i = 0; i < currentElements.length; i++) {
+                        if (currentElements[i].groupId == gid) indices.add(i);
+                      }
+                      setState(() {
+                        _selected..clear()..addAll(indices);
+                      });
+                    } else if (_multiSelectMode) {
+                      _toggleSelect(index);
+                    } else {
+                      _selectOnly(index);
+                    }
+                  },
+                  onDoubleTap: () => _editElement(index),
+                  child: decorated,
+                ),
+              );
+            }
           } else {
             return Positioned(
               top: element.offset.dy,
               left: element.offset.dx,
-              child: SizedBox(
-                  width: element.width, height: element.height, child: img),
+              child: SizedBox(width: element.width, height: element.height, child: img),
             );
           }
+
         }
 
       case 'image':
@@ -553,59 +728,68 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
         );
 
         if (_isEditing) {
-          return ResizableDraggable(
-            key: elementKeys[index],
-            isSelected: isSelected,
-            size: Size(element.width, element.height),
-            initialTop: element.offset.dy,
-            initialLeft: element.offset.dx,
-            onPositionChanged: (position, size) {
-              if (mounted) {
-                setState(() {
-                  currentElements[index] = currentElements[index].copyWith(
-                    offset: position,
-                    size: size,
-                    width: size.width,
-                    height: size.height,
-                  );
-                });
-              }
-            },
-            child: GestureDetector(
-              onTapDown: (d) => _lastTapLocal = d.localPosition,
-              onTap: () {
-                final el = currentElements[index];
-                if (!_multiSelectMode && el.groupId != null) {
-                  final gid = el.groupId;
-                  final indices = <int>[];
-                  for (int i = 0; i < currentElements.length; i++) {
-                    if (currentElements[i].groupId == gid) indices.add(i);
-                  }
+          final locked = _isLockedIdx(index);
+          if (locked) {
+            return Positioned(
+              top: element.offset.dy,
+              left: element.offset.dx,
+              child: SizedBox(
+                width: element.width,
+                height: element.height,
+                child: decoratedChild,
+              ),
+            );
+          } else {
+            return ResizableDraggable(
+              key: elementKeys[index],
+              isSelected: isSelected,
+              size: Size(element.width, element.height),
+              initialTop: element.offset.dy,
+              initialLeft: element.offset.dx,
+              onPositionChanged: (position, size) {
+                if (mounted) {
                   setState(() {
-                    _selected
-                      ..clear()
-                      ..addAll(indices);
+                    currentElements[index] = currentElements[index].copyWith(
+                      offset: position,
+                      size: size,
+                      width: size.width,
+                      height: size.height,
+                    );
                   });
-                } else if (_multiSelectMode) {
-                  _toggleSelect(index);
-                } else {
-                  _selectOnly(index);
                 }
               },
-              onDoubleTap: () => _editElement(index),
-              child: decoratedChild,
-            ),
-          );
+              child: GestureDetector(
+                onTapDown: (d) => _lastTapLocal = d.localPosition,
+                onTap: () {
+                  final el = currentElements[index];
+                  if (!_multiSelectMode && el.groupId != null) {
+                    final gid = el.groupId;
+                    final indices = <int>[];
+                    for (int i = 0; i < currentElements.length; i++) {
+                      if (currentElements[i].groupId == gid) indices.add(i);
+                    }
+                    setState(() {
+                      _selected..clear()..addAll(indices);
+                    });
+                  } else if (_multiSelectMode) {
+                    _toggleSelect(index);
+                  } else {
+                    _selectOnly(index);
+                  }
+                },
+                onDoubleTap: () => _editElement(index),
+                child: decoratedChild,
+              ),
+            );
+          }
         } else {
           return Positioned(
             top: element.offset.dy,
             left: element.offset.dx,
-            child: SizedBox(
-                width: element.width,
-                height: element.height,
-                child: drawingWidget),
+            child: SizedBox(width: element.width, height: element.height, child: drawingWidget),
           );
         }
+
 
       default:
         child = Container(
@@ -627,65 +811,84 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
     );
 
     if (_isEditing) {
-      return ResizableDraggable(
-        key: elementKeys[index],
-        isSelected: isSelected,
-        size: elementSize,
-        initialTop: element.offset.dy,
-        initialLeft: element.offset.dx,
-        onPositionChanged: (position, size) {
-          if (mounted) {
-            setState(() {
-              currentElements[index] = currentElements[index].copyWith(
-                offset: position,
-                size: size,
-                width: size.width,
-                height: size.height,
-              );
-            });
-          }
-        },
-        child: GestureDetector(
-          onTapDown: (d) => _lastTapLocal = d.localPosition,
-          onTap: () {
-            final el = currentElements[index];
-            if (!_multiSelectMode && el.groupId != null) {
-              final gid = el.groupId;
-              final indices = <int>[];
-              for (int i = 0; i < currentElements.length; i++) {
-                if (currentElements[i].groupId == gid) indices.add(i);
-              }
+      final locked = _isLockedIdx(index);
+      if (locked) {
+        return Positioned(
+          top: element.offset.dy,
+          left: element.offset.dx,
+          child: SizedBox(
+            width: elementSize.width,
+            height: elementSize.height,
+            child: Container(
+              decoration: BoxDecoration(
+                border: Border.all(
+                  color: isSelected ? Colors.blue : Colors.transparent,
+                  width: 2,
+                ),
+              ),
+              child: child,
+            ),
+          ),
+        );
+      } else {
+        return ResizableDraggable(
+          key: elementKeys[index],
+          isSelected: isSelected,
+          size: elementSize,
+          initialTop: element.offset.dy,
+          initialLeft: element.offset.dx,
+          onPositionChanged: (position, size) {
+            if (mounted) {
               setState(() {
-                _selected
-                  ..clear()
-                  ..addAll(indices);
+                currentElements[index] = currentElements[index].copyWith(
+                  offset: position,
+                  size: size,
+                  width: size.width,
+                  height: size.height,
+                );
               });
-            } else if (_multiSelectMode) {
-              _toggleSelect(index);
-            } else {
-              _selectOnly(index);
             }
           },
-          onDoubleTap: () => _editElement(index),
-          child: Container(
-            decoration: BoxDecoration(
-              border: Border.all(
-                color: isSelected ? Colors.blue : Colors.transparent,
-                width: 2,
+          child: GestureDetector(
+            onTapDown: (d) => _lastTapLocal = d.localPosition,
+            onTap: () {
+              final el = currentElements[index];
+              if (!_multiSelectMode && el.groupId != null) {
+                final gid = el.groupId;
+                final indices = <int>[];
+                for (int i = 0; i < currentElements.length; i++) {
+                  if (currentElements[i].groupId == gid) indices.add(i);
+                }
+                setState(() {
+                  _selected..clear()..addAll(indices);
+                });
+              } else if (_multiSelectMode) {
+                _toggleSelect(index);
+              } else {
+                _selectOnly(index);
+              }
+            },
+            onDoubleTap: () => _editElement(index),
+            child: Container(
+              decoration: BoxDecoration(
+                border: Border.all(
+                  color: isSelected ? Colors.blue : Colors.transparent,
+                  width: 2,
+                ),
               ),
+              child: child,
             ),
-            child: child,
           ),
-        ),
-      );
+        );
+      }
     } else {
       return Positioned(
         top: element.offset.dy,
         left: element.offset.dx,
-        child: SizedBox(
-            width: element.width, height: element.height, child: child),
+        child: SizedBox(width: element.width, height: element.height, child: child),
       );
     }
+
   }
 
   // === Group overlay (a single ResizableDraggable controlling the selection)
@@ -726,7 +929,7 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
           if (dx != 0 || dy != 0) {
             setState(() {
               final upd = List<PanelElementModel>.from(currentElements);
-              for (final i in _selected) {
+              for (final i in _selectedUnlocked) {
                 final e = upd[i];
                 final newPos = _clampOffset(
                   e.offset + Offset(dx, dy),
@@ -749,7 +952,7 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
         if (!_resizing) {
           _resizing = true;
           _resizeBaseRect = _lastGroupRect; // baseline
-          _resizeSnap = _selected.map((i) {
+          _resizeSnap = _selectedUnlocked.map((i) {
             final e = currentElements[i];
             return _Snap(i, e.offset, e.width, e.height);
           }).toList(growable: false);
@@ -912,7 +1115,7 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
     }
   }*/
   void _resetGroupOverlayRect() {
-    if (_hasMultiSelection) {
+    if (_hasMultiUnlocked) {
       final r = _selectionBounds();
       setState(() {
         _lastGroupRect = r;
@@ -938,7 +1141,7 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
     }
   }
 
-  Rect _selectionBounds() {
+/*  Rect _selectionBounds() {
     double minL = double.infinity, minT = double.infinity;
     double maxR = -double.infinity, maxB = -double.infinity;
     for (final i in _selected) {
@@ -949,7 +1152,22 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
       maxB = math.max(maxB, e.offset.dy + e.height);
     }
     return Rect.fromLTRB(minL, minT, maxR, maxB);
+  }*/
+  Rect _selectionBounds() {
+    final items = _selectedUnlocked.toList();
+    if (items.isEmpty) return const Rect.fromLTWH(0, 0, 0, 0);
+    double minL = double.infinity, minT = double.infinity;
+    double maxR = -double.infinity, maxB = -double.infinity;
+    for (final i in items) {
+      final e = currentElements[i];
+      minL = math.min(minL, e.offset.dx);
+      minT = math.min(minT, e.offset.dy);
+      maxR = math.max(maxR, e.offset.dx + e.width);
+      maxB = math.max(maxB, e.offset.dy + e.height);
+    }
+    return Rect.fromLTRB(minL, minT, maxR, maxB);
   }
+
 
   void _transformSelection(Rect from, Rect to) {
     final double sx = (from.width <= 0.0001) ? 1.0 : (to.width / from.width);
@@ -986,6 +1204,7 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
   Widget _buildFloatingToolbox(PanelElementModel element) {
     // show only for single selection
     if (_singleSelectedIndex == null) return const SizedBox.shrink();
+    if (_isLockedIdx(_singleSelectedIndex!)) return const SizedBox.shrink(); // add this
 
     List<Widget> toolIcons = [];
     switch (element.type) {
@@ -1199,7 +1418,7 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
     }
   }
 
-  void _deleteElementById(String id) {
+/*  void _deleteElementById(String id) {
     final index = currentElements.indexWhere((e) => e.id == id);
     if (index == -1) return;
 
@@ -1208,7 +1427,24 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
       elementKeys.removeAt(index);
       _selected.remove(index);
     });
+  }*/
+
+  void _deleteElementById(String id) {
+    final index = currentElements.indexWhere((e) => e.id == id);
+    if (index == -1) return;
+    if (_isLockedIdx(index)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Layer is locked')),
+      );
+      return;
+    }
+    setState(() {
+      currentElements.removeAt(index);
+      elementKeys.removeAt(index);
+      _selected.remove(index);
+    });
   }
+
 
   Future<void> _editSpeechBubble(int index) async {
     final element = currentElements[index];
@@ -1450,7 +1686,8 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
     setState(() {
       currentElements.add(element);
       elementKeys.add(GlobalKey<ResizableDraggableState>());
-      // optional: auto-select the new element
+      _hiddenById[element.id] = false;
+      _lockedById[element.id] = false;
       _selected
         ..clear()
         ..add(currentElements.length - 1);
@@ -1813,7 +2050,8 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
     return cloned;
   }
 
-  void _savePanel() async {
+/*
+  Future<void> _savePanel({bool exitAfterSave = true}) async {
     if (_isSaving) return;
     setState(() {
       _isSaving = true;
@@ -1826,59 +2064,119 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
         final key = elementKeys[i];
         final state = key.currentState;
         if (state != null) {
-          final updatedElement = currentElements[i].copyWith(
+          updatedElements.add(currentElements[i].copyWith(
             offset: state.position,
             size: state.size,
             width: state.size.width,
             height: state.size.height,
             fontFamily: currentElements[i].fontFamily,
-          );
-          updatedElements.add(updatedElement);
+          ));
         } else {
           updatedElements.add(currentElements[i]);
         }
       }
 
-      await Future.delayed(const Duration(milliseconds: 100));
-      setState(() {
-        _isEditing = true;
-      });
+      // Let UI settle (e.g., hidden layer removed) before capturing
+      await Future.delayed(const Duration(milliseconds: 50));
+      setState(() => _isEditing = true);
 
       final capturedImage = await _capturePanelAsImage();
 
+      final updatedPanel = panel.copyWith(
+        elements: updatedElements,                 // ← elements are unchanged
+        backgroundColor: _selectedBackgroundColor,
+        previewImage: capturedImage,               // ← reflects hidden layers
+      );
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Panel saved'), duration: Duration(milliseconds: 800)),
+        );
+      }
+
+      if (mounted && exitAfterSave) {
+        Navigator.pop(context, updatedPanel);
+      } else {
+        // Stay on screen: just update local panel reference
+        panel = updatedPanel;
+      }
+    } catch (e) {
+      debugPrint('Error saving panel: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Save failed'), backgroundColor: Colors.red),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isSaving = false);
+    }
+  }
+*/
+
+  void _savePanel() async {
+    if (_isSaving) return;
+    setState(() {
+      _isSaving = true;
+      _isEditing = false; // temporarily hide guides etc. for capture
+    });
+
+    try {
+      // 1) Build elements with latest position/size
+      final updatedElements = <PanelElementModel>[];
+      for (int i = 0; i < currentElements.length; i++) {
+        final st = elementKeys[i].currentState;
+        final src = currentElements[i];
+
+        final newSize = st?.size ?? src.size ?? Size(src.width, src.height);
+        final newOffset = st?.position ?? src.offset;
+
+        var el = src.copyWith(
+          offset: newOffset,
+          size: newSize,
+          width: newSize.width,
+          height: newSize.height,
+        );
+
+        // 2) Persist hidden flag into meta so it survives reopen
+        final hidden = _hiddenById[el.id] ?? false;
+        el = _withHiddenFlag(el, hidden);
+
+        updatedElements.add(el);
+      }
+
+      // Let the UI settle, then re-enable editing for capture
+      await Future.delayed(const Duration(milliseconds: 60));
+      if (mounted) setState(() => _isEditing = true);
+
+      // 3) Capture preview image (reflects hidden layers)
+      final capturedImage = await _capturePanelAsImage();
+
+      // 4) Build updated panel
       final updatedPanel = panel.copyWith(
         elements: updatedElements,
         backgroundColor: _selectedBackgroundColor,
         previewImage: capturedImage,
       );
 
+      // 5) Persist upward (callback) and also return via pop
+      panel = updatedPanel; // local cache
+      widget.onAutosave?.call(updatedPanel);
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-              content: Text('Panel saved successfully!'),
-              duration: Duration(seconds: 1)),
+          const SnackBar(content: Text('Panel saved!'), duration: Duration(milliseconds: 900)),
         );
-      }
-      await Future.delayed(const Duration(milliseconds: 500));
-      if (mounted) {
         Navigator.pop(context, updatedPanel);
       }
     } catch (e) {
       debugPrint('Error saving panel: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Error saving panel. Please try again.'),
-            backgroundColor: Colors.red,
-          ),
+          const SnackBar(content: Text('Error saving panel. Please try again.'), backgroundColor: Colors.red),
         );
       }
     } finally {
-      if (mounted) {
-        setState(() {
-          _isSaving = false;
-        });
-      }
+      if (mounted) setState(() => _isSaving = false);
     }
   }
 
@@ -1905,7 +2203,7 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
         // Group / Ungroup (disabled as needed)
         PopupMenuItem<_PanelMenuAction>(
           value: _PanelMenuAction.group,
-          enabled: _hasMultiSelection,
+          enabled: _hasMultiUnlocked,
           child: _menuRow(Icons.merge_type, 'Group'),
         ),
         PopupMenuItem<_PanelMenuAction>(
@@ -1922,7 +2220,7 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
         ),
         PopupMenuItem<_PanelMenuAction>(
           value: _PanelMenuAction.paste,
-          enabled: _canPaste,
+          enabled: _hasUnlockedSelection, // was _canPaste or similar
           child: _menuRow(Icons.content_paste, 'Paste'),
         ),
         // Delete selection (single or multiple)
@@ -1955,7 +2253,7 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
 
       case _PanelMenuAction.ungroup:
         if (_hasSelection) {
-          _ungroupSelected();            //  no change to _multiSelectMode here
+          _ungroupSelected(); //  no change to _multiSelectMode here
           _resetGroupOverlayRect();
         }
         break;
@@ -1984,29 +2282,272 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
       ],
     );
   }
+
+  Widget _wrapLayerLock(int index, Widget child) {
+    return AbsorbPointer(
+      absorbing: _isLockedIdx(index),
+      child: Opacity(
+        opacity: _isLockedIdx(index) ? 0.6 : 1.0,
+        child: child,
+      ),
+    );
+  }
+
+/*  void _toggleVisibleById(String id) {
+    setState(() {
+      final nowHidden = !(_hiddenById[id] ?? false);
+      _hiddenById[id] = nowHidden;
+      if (nowHidden) {
+        final idx = currentElements.indexWhere((e) => e.id == id);
+        if (idx != -1) _selected.remove(idx);
+        _resetGroupOverlayRect();
+      }
+    });
+  }*/
+
+  /*void _toggleVisibleById(String id) {
+    setState(() {
+      final nowHidden = !(_hiddenById[id] ?? false);
+      _hiddenById[id] = nowHidden;
+
+      final idx = currentElements.indexWhere((e) => e.id == id);
+      if (idx != -1) {
+        // persist to the element’s meta so it survives reopening
+        currentElements[idx] = _withHiddenFlag(currentElements[idx], nowHidden);
+
+        // unselect if we just hid it
+        if (nowHidden) _selected.remove(idx);
+      }
+    });
+    _resetGroupOverlayRect();
+  }
+*/
+
+  void _toggleVisibleById(String id) {
+    setState(() {
+      final nowHidden = !(_hiddenById[id] ?? false);
+      _hiddenById[id] = nowHidden;
+
+      final idx = currentElements.indexWhere((e) => e.id == id);
+      if (idx != -1) {
+        currentElements[idx] = _withHiddenFlag(currentElements[idx], nowHidden); // persist
+        if (nowHidden) _selected.remove(idx); // unselect if we just hid it
+      }
+    });
+    _resetGroupOverlayRect();
+
+ /*   // OPTIONAL: immediate autosave back to parent so state persists even if user doesn’t press “Save”
+    final panelSnapshot = panel.copyWith(elements: currentElements, backgroundColor: _selectedBackgroundColor);
+    widget.onAutosave?.call(panelSnapshot);*/
+  }
+
+/*
+  void _toggleVisibleById(String id) {
+    setState(() {
+      final nowHidden = !(_hiddenById[id] ?? false);
+      _hiddenById[id] = nowHidden;
+
+      // If we just hid a selected layer, unselect it
+      if (nowHidden) {
+        final idx = currentElements.indexWhere((e) => e.id == id);
+        if (idx != -1) _selected.remove(idx);
+      }
+    });
+
+    _resetGroupOverlayRect();
+
+    // Save immediately with the hidden layer NOT rendered in the preview,
+    // but WITHOUT leaving the edit screen.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _savePanel(exitAfterSave: false);
+    });
+  }
+*/
+
+ /* void _toggleLockById(String id) {
+    setState(() => _lockedById[id] = !(_lockedById[id] ?? false));
+  }*/
+  void _toggleLockById(String id) {
+    setState(() {
+      final next = !(_lockedById[id] ?? false);
+      _lockedById[id] = next;
+      if (next) {
+        final idx = currentElements.indexWhere((e) => e.id == id);
+        if (idx != -1) _selected.remove(idx);
+      }
+    });
+    _resetGroupOverlayRect();
+  }
+
+
+  String _layerTitle(PanelElementModel el, int idx) {
+    switch (el.type) {
+      case 'text':
+        return 'Text (${el.value.toString().trim()})';
+      case 'image':
+        return 'Image';
+      case 'clipart':
+        return 'Clipart';
+      case 'character':
+        return 'Character';
+      case 'speech_bubble':
+        return 'Speech Bubble';
+      case 'Draw':
+        return 'Drawing';
+      default:
+        return 'Layer #${idx + 1}';
+    }
+  }
+
+  Widget _buildLayerEditorPanel() {
+    // Show top-most first
+    final displayOrder =
+        List<int>.generate(currentElements.length, (i) => i).reversed.toList();
+
+    return Positioned(
+      right: 8,
+      top: kToolbarHeight + MediaQuery.of(context).padding.top + 8,
+      bottom: 16,
+      child: Material(
+        elevation: 8,
+        borderRadius: BorderRadius.circular(12),
+        color: Colors.white,
+        child: Container(
+          width: 300,
+          padding: const EdgeInsets.all(8),
+          child: Column(
+            children: [
+              Row(
+                children: [
+                  const Icon(Icons.layers),
+                  const SizedBox(width: 8),
+                  const Expanded(
+                      child: Text('Layers',
+                          style: TextStyle(fontWeight: FontWeight.w700))),
+                  IconButton(
+                    tooltip: 'Close',
+                    icon: const Icon(Icons.close),
+                    onPressed: () => setState(() => _showLayerPanel = false),
+                  ),
+                ],
+              ),
+              const Divider(height: 1),
+              Expanded(
+                child: ReorderableListView.builder(
+                  buildDefaultDragHandles: false,
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  itemCount: displayOrder.length,
+                  onReorder: (oldDisplay, newDisplay) {
+                    setState(() {
+                      final len = currentElements.length;
+
+                      // Convert "display row" to actual backing index
+                      final oldIdx = len - 1 - oldDisplay;
+                      int newIdx = len - 1 - newDisplay;
+                      if (newDisplay > oldDisplay) newIdx += 1;
+                      newIdx = newIdx.clamp(0, currentElements.length);
+
+                      // Preserve selection by IDs
+                      final selectedIds =
+                          _selected.map((i) => currentElements[i].id).toSet();
+
+                      final movedEl = currentElements.removeAt(oldIdx);
+                      final movedKey = elementKeys.removeAt(oldIdx);
+                      currentElements.insert(newIdx, movedEl);
+                      elementKeys.insert(newIdx, movedKey);
+
+                      // Rebuild selection set after reorder
+                      _selected.clear();
+                      for (int i = 0; i < currentElements.length; i++) {
+                        if (selectedIds.contains(currentElements[i].id)) {
+                          _selected.add(i);
+                        }
+                      }
+                      _resetGroupOverlayRect();
+                    });
+                  },
+                  itemBuilder: (ctx, displayIndex) {
+                    final idx = displayOrder[displayIndex];
+                    final el = currentElements[idx];
+                    final selected = _selected.contains(idx);
+                    final hidden = _isHiddenIdx(idx);
+                    final locked = _isLockedIdx(idx);
+
+                    return Container(
+                      key: ValueKey(el.id),
+                      margin: const EdgeInsets.symmetric(vertical: 4),
+                      decoration: BoxDecoration(
+                        color: selected
+                            ? Colors.blue.withOpacity(0.08)
+                            : Colors.white,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(
+                            color: selected ? Colors.blue : Colors.black12),
+                      ),
+                      child: ListTile(
+                        dense: true,
+                        contentPadding:
+                            const EdgeInsets.symmetric(horizontal: 8),
+                        leading: ReorderableDragStartListener(
+                          index: displayIndex,
+                          child: const Icon(Icons.drag_indicator),
+                        ),
+                        title: Text(
+                          _layerTitle(el, idx),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        subtitle: Text(
+                          '${el.type}  ·  ${el.width.toInt()}×${el.height.toInt()}',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(fontSize: 12),
+                        ),
+                        onTap: () {
+                          setState(() {
+                            if (_multiSelectMode) {
+                              if (_selected.contains(idx)) {
+                                _selected.remove(idx);
+                              } else {
+                                _selected.add(idx);
+                              }
+                            } else {
+                              _selected
+                                ..clear()
+                                ..add(idx);
+                            }
+                          });
+                          _resetGroupOverlayRect();
+                        },
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            IconButton(
+                              tooltip: hidden ? 'Show' : 'Hide',
+                              icon: Icon(hidden
+                                  ? Icons.visibility_off
+                                  : Icons.visibility),
+                              onPressed: () => _toggleVisibleById(el.id),
+                            ),
+                            IconButton(
+                              tooltip: locked ? 'Unlock' : 'Lock',
+                              icon: Icon(locked ? Icons.lock : Icons.lock_open),
+                              onPressed: () => _toggleLockById(el.id),
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 /*class PanelEditScreen extends StatefulWidget {
   final ComicPanel panel;

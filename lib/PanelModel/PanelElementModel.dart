@@ -20,6 +20,8 @@ class PanelElementModel {
   final FontStyle? fontStyle;
   final String? meta; //
   final String? groupId; // <-- NEW
+  final bool hidden; // <— NEW (defaults to false)
+
 
 
   const PanelElementModel({
@@ -38,7 +40,12 @@ class PanelElementModel {
     this.fontStyle,
     this.meta, // <-- NEW
     this.groupId,
+    this.hidden = false,
+
   });
+
+  static const _unset = Object(); // sentinel
+
 
   PanelElementModel copyWith({
     String? id,
@@ -55,7 +62,9 @@ class PanelElementModel {
     FontWeight? fontWeight,
     FontStyle? fontStyle,
     String? meta, // <-- NEW
-    String? groupId,
+    Object? groupId = _unset,
+    bool? hidden, // <— NEW
+
   }) {
     return PanelElementModel(
       id: id ?? this.id,
@@ -72,8 +81,8 @@ class PanelElementModel {
       fontWeight: fontWeight ?? this.fontWeight,
       fontStyle: fontStyle ?? this.fontStyle,
       meta: meta ?? this.meta, // <-- NEW
-      groupId: groupId ?? this.groupId,
-
+      groupId: identical(groupId, _unset) ? this.groupId : groupId as String?,
+      hidden: hidden ?? this.hidden,
     );
   }
 
@@ -96,11 +105,22 @@ class PanelElementModel {
       'fontStyle': fontStyle?.index,
       'meta': meta, // <-- NEW
       'groupId': groupId,
+      'hidden': hidden, // <- persisted
 
     };
   }
 
+
+
   factory PanelElementModel.fromMap(Map<String, dynamic> map) {
+
+    bool _readHidden(dynamic v) {
+      if (v is bool) return v;
+      if (v is num) return v != 0;
+      if (v is String) return v.toLowerCase() == 'true';
+      return false;
+    }
+
     return PanelElementModel(
       id: map['id'] ?? '',
       type: map['type'] ?? '',
@@ -129,7 +149,7 @@ class PanelElementModel {
           : null,
       meta: map['meta'], // <-- NEW
       groupId: map['groupId'] as String?,
-
+      hidden: map['hidden'] ?? false, // <- read persisted hidden state
     );
   }
 

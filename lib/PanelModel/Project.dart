@@ -114,6 +114,8 @@ class LayoutPanel {
         color: element.color,
         fontSize: element.fontSize,
         fontFamily: element.fontFamily,
+        meta: element.meta,                  // <-- PRESERVE meta (contains hidden flag)
+
       );
     }).toList();
 
@@ -141,4 +143,6 @@ class LayoutPanel {
     print('Updated panel elements count: ${updatedPanel.elements.length}');
     return updatedPanel;
   }
+
+
 }
