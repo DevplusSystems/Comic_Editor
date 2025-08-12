@@ -426,7 +426,9 @@ class _PanelLayoutEditorScreenState extends State<PanelLayoutEditorScreen>
                 ),
               ),
             ),
+/*
             if (selectedPanel != null) _buildFloatingEditButton(),
+*/
           ],
         ),
       ),

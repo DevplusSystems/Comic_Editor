@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -27,7 +28,7 @@ import 'TextEditorDialog/TextEditDialog.dart';
 import 'dart:math' as math;
 
 // Menu actions
-enum _PanelMenuAction { toggleMultiSelect, group, ungroup, copy, paste, delete }
+enum _PanelMenuAction { toggleMultiSelect, group, ungroup, copy, paste, delete, undo ,redo}
 
 bool get _canPaste => true; // or: clipboardElements.isNotEmpty;
 
@@ -77,6 +78,8 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
 
   bool _isSaving = false;
   bool _isEditing = true;
+
+  // Add this state field at the top of _PanelEditScreenState
 
   final GlobalKey _panelContentKey = GlobalKey();
   double aspectRatio = 3 / 4;
@@ -132,6 +135,18 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
   bool get _hasMultiUnlocked => _selectedUnlocked.length > 1;
   // ===== Unlocked selection
 
+
+
+  // ——— Save/Progress state ———
+  String _saveStatus = 'Saved';
+  double? _saveProgress;              // null when idle, 0..1 while saving
+  Timer? _autosaveDebounce;
+  int _saveGen = 0;
+
+  // ——— Save/Progress state ———
+
+
+  final List<PanelElementModel> _redoStack = []; // holds items removed by Undo
 
 
   // ==== NEW: layer locked, hidden handling
@@ -395,9 +410,20 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
       onWillPop: _onWillPop,
       child: Scaffold(
         appBar: AppBar(
-          title: const Text('Edit'),
           backgroundColor: Colors.blue.shade400,
           foregroundColor: Colors.white,
+          // ↓ minimize the gap between back arrow and title
+          titleSpacing: 10,            // default is 16
+          leadingWidth: 40,           // shrink the leading area (optional)
+
+          title: const Text('Edit', overflow: TextOverflow.ellipsis),
+
+          bottom: _saveProgress != null
+              ? PreferredSize(
+            preferredSize: const Size.fromHeight(3),
+            child: LinearProgressIndicator(value: _saveProgress),
+          )
+              : null,
           actions: [
             IconButton(
               tooltip: _showLayerPanel ? 'Hide Layers' : 'Layers',
@@ -405,21 +431,8 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
                   color: _showLayerPanel ? Colors.amberAccent : Colors.white),
               onPressed: () => setState(() => _showLayerPanel = !_showLayerPanel),
             ),
-            IconButton(
-              icon: const Icon(Icons.undo),
-              onPressed: _isSaving
-                  ? null
-                  : () {
-                if (currentElements.isNotEmpty && elementKeys.isNotEmpty) {
-                  setState(() {
-                    currentElements.removeLast();
-                    elementKeys.removeLast();
-                    _clearSelection();
-                  });
-                }
-              },
-            ),
-            ElevatedButton(
+
+           /* ElevatedButton(
               onPressed: _isSaving ? null : _savePanel,
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.green,
@@ -435,8 +448,17 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
                 ),
               )
                   : const Text('Save Panel'),
+            ),*/
+
+            const SizedBox(width: 12),
+            Flexible(
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.centerRight,
+                child: SaveStatusPill(status: _saveStatus, progress: _saveProgress),
+              ),
             ),
-            const SizedBox(width: 8),
+            const SizedBox(width: 5),
             _buildPanelOverflowMenu(),
           ],
         ),
@@ -564,6 +586,7 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
     } catch (_) {}
 
     widget.onAutosave?.call(updatedPanel);      // notify parent
+    await _performAutosave();
     Navigator.pop(context, updatedPanel);       // return updated panel
     return false; // prevent default pop (we already popped)
   }
@@ -1017,6 +1040,10 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
                 height: size.height,
               );
             });
+            _redoStack.clear();   // ← break redo chain on fresh edits
+
+            _queueAutosave();
+
           },
           onDelete: () => _deleteElementById(element.id), // <<< NEW
           child: GestureDetector(
@@ -1038,7 +1065,9 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
                 _selectOnly(index);
               }
             },
+/*
             onDoubleTap: () => _editElement(index),
+*/
             child: decorated,
           ),
         );
@@ -1125,6 +1154,10 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
                 height: size.height,
               );
             });
+            _redoStack.clear();   // ← break redo chain on fresh edits
+
+            _queueAutosave();
+
           },
           onDelete: () => _deleteElementById(element.id), // <<< NEW
           child: GestureDetector(
@@ -1217,6 +1250,8 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
             height: size.height,
           );
         });
+        _redoStack.clear();   // ← break redo chain on fresh edits
+        _queueAutosave();
       },
       onDelete: () => _deleteElementById(element.id), // <<< NEW
       child: GestureDetector(
@@ -1828,6 +1863,9 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
       elementKeys.removeAt(index);
       _selected.remove(index);
     });
+    _redoStack.clear();   // ← break redo chain on fresh edits
+
+    _queueAutosave();
   }
 
 
@@ -2077,6 +2115,9 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
         ..clear()
         ..add(currentElements.length - 1);
     });
+    _redoStack.clear();   // ← break redo chain on fresh edits
+
+    _queueAutosave();
   }
 
   Future<void> _addSpeechBubble() async {
@@ -2614,6 +2655,17 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
           enabled: _canPaste,
           child: _menuRow(Icons.delete, 'Delete'),
         ),
+        PopupMenuItem<_PanelMenuAction>(
+          value: _PanelMenuAction.undo,
+          enabled: !_isSaving && currentElements.isNotEmpty,
+          child: _menuRow(Icons.undo, 'Undo'),
+        ),
+        PopupMenuItem<_PanelMenuAction>(
+          value: _PanelMenuAction.redo,
+          enabled: !_isSaving && _redoStack.isNotEmpty,          // ← enable/disable
+          child: _menuRow(Icons.redo, 'Redo'),
+        ),
+
       ],
     );
   }
@@ -2653,8 +2705,16 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
       case _PanelMenuAction.delete:
         if (_hasSelection) _deleteSelection();
         break;
+      case _PanelMenuAction.undo:
+        _undoLast();
+        break;
+      case _PanelMenuAction.redo:
+        _redoLast();
+        break;
     }
   }
+
+
 
 // Small helper to render icon + label in menu
   Widget _menuRow(IconData icon, String text) {
@@ -2720,8 +2780,10 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
       }
     });
     _resetGroupOverlayRect();
+    _queueAutosave();
 
- /*   // OPTIONAL: immediate autosave back to parent so state persists even if user doesn’t press “Save”
+
+    /*   // OPTIONAL: immediate autosave back to parent so state persists even if user doesn’t press “Save”
     final panelSnapshot = panel.copyWith(elements: currentElements, backgroundColor: _selectedBackgroundColor);
     widget.onAutosave?.call(panelSnapshot);*/
   }
@@ -3051,6 +3113,135 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
     );
   }
 
+  Future<void> _performAutosave() async {
+    final myToken = ++_saveGen;
+    setState(() {
+      _saveStatus = 'Saving...';
+      _saveProgress = 0.0;
+      _isSaving = true;
+    });
+
+    // Build updatedPanel exactly like your _savePanel() does:
+    try {
+      // STEP 1: snapshot element states
+      final updatedElements = <PanelElementModel>[];
+      for (int i = 0; i < currentElements.length; i++) {
+        final st = (i < elementKeys.length) ? elementKeys[i].currentState : null;
+        final src = currentElements[i];
+        final newSize = st?.size ?? src.size ?? Size(src.width, src.height);
+        final newOffset = st?.position ?? src.offset;
+        var el = src.copyWith(
+          offset: newOffset,
+          size: newSize,
+          width: newSize.width,
+          height: newSize.height,
+        );
+        // persist visibility flag
+        final hidden = _hiddenById[el.id] ?? false;
+        el = _withHiddenFlag(el, hidden);
+        updatedElements.add(el);
+      }
+      if (!mounted || myToken != _saveGen) return;
+      setState(() => _saveProgress = 0.15); // 15%
+
+      // STEP 2: let UI settle
+      await Future.delayed(const Duration(milliseconds: 40));
+      if (!mounted || myToken != _saveGen) return;
+      setState(() => _saveProgress = 0.25); // 25%
+
+      // STEP 3: capture preview (heaviest)
+      setState(() => _isEditing = true); // ensure guides off if you do that
+      final capturedImage = await _capturePanelAsImage();
+      if (!mounted || myToken != _saveGen) return;
+      setState(() => _saveProgress = 0.70); // 70%
+
+      // STEP 4: assemble panel
+      final updatedPanel = panel.copyWith(
+        elements: updatedElements,
+        backgroundColor: _selectedBackgroundColor,
+        previewImage: capturedImage,
+      );
+      if (!mounted || myToken != _saveGen) return;
+      setState(() => _saveProgress = 0.85); // 85%
+
+      // STEP 5: notify parent storage layer
+      widget.onAutosave?.call(updatedPanel);
+      panel = updatedPanel;
+
+      if (!mounted || myToken != _saveGen) return;
+      setState(() {
+        _saveProgress = 1.0;           // 100%
+        _saveStatus   = 'Saved';
+        _isSaving     = false;
+      });
+
+      // Tiny delay so users see 100% flash, then clear bar
+      await Future.delayed(const Duration(milliseconds: 200));
+      if (!mounted || myToken != _saveGen) return;
+      setState(() => _saveProgress = null);
+    } catch (e) {
+      if (!mounted || myToken != _saveGen) return;
+      setState(() {
+        _saveStatus = 'Save failed';
+        _isSaving = false;
+        _saveProgress = null;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Error saving panel.'), backgroundColor: Colors.red),
+      );
+    }
+  }
+
+  void _queueAutosave() {
+    _autosaveDebounce?.cancel();
+    _autosaveDebounce = Timer(const Duration(milliseconds: 350), () {
+      _performAutosave();
+    });
+  }
+
+  /*void _undoLast() {
+    if (_isSaving) return;
+    if (currentElements.isEmpty || elementKeys.isEmpty) return;
+
+    setState(() {
+      currentElements.removeLast();
+      elementKeys.removeLast();
+      _clearSelection();
+    });
+
+    // optional: trigger autosave so preview/state stays consistent
+    _queueAutosave(); // if you’re using the debounced autosave from earlier
+  }*/
+
+  void _undoLast() {
+    if (_isSaving) return;
+    if (currentElements.isEmpty) return;
+
+    setState(() {
+      final removed = currentElements.removeLast();
+      if (elementKeys.isNotEmpty) elementKeys.removeLast();
+      _redoStack.add(removed);            // ← enable redo
+      _selected.clear();
+    });
+    _queueAutosave(); // or your autosave trigger
+  }
+
+  void _redoLast() {
+    if (_isSaving) return;
+    if (_redoStack.isEmpty) return;
+
+    setState(() {
+      final el = _redoStack.removeLast();
+      currentElements.add(el);
+      elementKeys.add(GlobalKey<ResizableDraggableState>());
+      _selected
+        ..clear()
+        ..add(currentElements.length - 1);
+    });
+    _queueAutosave();
+  }
+
+  
 
 
 /*
@@ -3204,6 +3395,83 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
   }
 */
 }
+
+/// A tiny rounded pill that shows save state + optional percent.
+/// Yellow when saving/unsaved, Green when saved.
+class SaveStatusPill extends StatelessWidget {
+  final String status;        // e.g. "Saving..." or "Saved"
+  final double? progress;     // null when idle, 0..1 when saving
+
+  const SaveStatusPill({
+    super.key,
+    required this.status,
+    required this.progress,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final bool isSaving = progress != null && progress! < 1.0;
+    final bool isSaved  = (progress == null && status.toLowerCase() == 'saved') || progress == 1.0;
+
+    final Color bg = isSaved
+        ? Colors.green.shade600
+        : Colors.amber.shade600; // yellow when not saved / saving
+
+    final Color fg = Colors.white;
+
+    final String percentStr =
+    isSaving ? '${(progress!.clamp(0, 1) * 100).round()}%' : '';
+
+    final IconData icon = isSaved ? Icons.check_circle : Icons.autorenew;
+
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 200),
+      curve: Curves.easeOut,
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(999), // full pill
+        boxShadow: [
+          BoxShadow(
+            color: bg.withOpacity(0.35),
+            blurRadius: 6,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          AnimatedSwitcher(
+            duration: const Duration(milliseconds: 200),
+            child: Icon(icon, key: ValueKey(icon), size: 16, color: fg),
+          ),
+          const SizedBox(width: 6),
+          Text(
+            status,
+            style: TextStyle(
+              color: fg,
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          if (isSaving) ...[
+            const SizedBox(width: 6),
+            Text(
+              percentStr,
+              style: TextStyle(
+                color: fg.withOpacity(0.95),
+                fontSize: 12,
+                fontFeatures: const [FontFeature.tabularFigures()],
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
 
 /*class PanelEditScreen extends StatefulWidget {
   final ComicPanel panel;

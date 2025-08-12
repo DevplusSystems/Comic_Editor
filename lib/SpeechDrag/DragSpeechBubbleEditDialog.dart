@@ -152,7 +152,7 @@ class _DragSpeechBubbleEditDialogState
               // ==== Preview with draggable tail ====
               SizedBox(
                 width: 500,
-                height: 200,
+                height: 250,
                 child: Stack(
                   children: [
                     CustomPaint(
