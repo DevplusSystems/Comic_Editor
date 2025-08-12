@@ -131,6 +131,8 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
   // ===== Unlocked selection
 
 
+
+  // ==== NEW: layer locked, hidden handling
 // inside _PanelEditScreenState:
   Map<String, dynamic> _safeMetaMap(String? meta) {
     if (meta == null || meta.isEmpty) return {};
@@ -168,8 +170,31 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
     final metaStr = _metaSetHidden(map, hidden);
     return e.copyWith(meta: metaStr);
   }
+  // ==== NEW: layer locked , hidden handling
+
+// === Right inspector (draggable/collapsible) ===
+  double _inspectorTop = 0;            // y-offset from top
+  double _inspectorHeight = 420;       // expanded height
+  bool _inspectorCollapsed = false;    // collapsed to header
+
+  double? _inspectorDragStartDy;       // for vertical drag
+  double? _inspectorStartTop;
+
+  double? _resizeDragStartDy;          // for bottom-edge resize
+  double? _inspectorStartHeight;
+
+  static const double _kInspectorWidth = 300;
+  static const double _kInspectorHeaderH = 44; // header height when collapsed
 
 
+ /* @override
+  void initState() {
+    super.initState();
+    panel = widget.panel;
+    currentElements = List.from(panel.elements);
+    _selectedBackgroundColor = panel.backgroundColor;
+    _initializeElements();
+  }*/
 
   @override
   void initState() {
@@ -178,7 +203,15 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
     currentElements = List.from(panel.elements);
     _selectedBackgroundColor = panel.backgroundColor;
     _initializeElements();
+
+    // position the inspector under the app bar on first build
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final safeTop = kToolbarHeight + MediaQuery.of(context).padding.top + 8;
+      setState(() => _inspectorTop = safeTop);
+    });
   }
+
 
   void _initializeElements() {
     elementKeys.clear();
@@ -348,7 +381,7 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
       onWillPop: _onWillPop, // <— NEW
       child: Scaffold(
         appBar: AppBar(
-          title: const Text('Edit Panel'),
+          title: const Text('Edit'),
           backgroundColor: Colors.blue.shade400,
           foregroundColor: Colors.white,
           actions: [
@@ -2398,7 +2431,277 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
         return 'Layer #${idx + 1}';
     }
   }
+  Widget _buildLayerEditorPanel() {
+    // Show top-most first
 
+    final EdgeInsets panelPadding =
+    _inspectorCollapsed ? const EdgeInsets.symmetric(horizontal: 8)
+        : const EdgeInsets.all(8);
+
+    final double collapsedHeight = _kInspectorHeaderH + panelPadding.vertical;
+    final double panelHeight = _inspectorCollapsed ? collapsedHeight : _inspectorHeight;
+
+
+
+    final displayOrder =
+    List<int>.generate(currentElements.length, (i) => i).reversed.toList();
+
+    final mq = MediaQuery.of(context);
+    final screenH = mq.size.height;
+    final safeTopMin = kToolbarHeight + mq.padding.top + 8;
+    const bottomMargin = 16.0;
+
+
+    // Clamp current top inside screen on every build
+    final maxTop = (screenH - panelHeight - bottomMargin).clamp(0.0, screenH);
+    final clampedTop = _inspectorTop.clamp(safeTopMin, maxTop);
+
+
+    final currentHeight = _inspectorCollapsed ? collapsedHeight : _inspectorHeight;
+    final maxTopNow = screenH - currentHeight - bottomMargin;
+
+
+    if (clampedTop != _inspectorTop) {
+      // keep state valid without setState loop
+      _inspectorTop = clampedTop;
+    }
+
+    void _toggleCollapsed() {
+      setState(() {
+        _inspectorCollapsed = !_inspectorCollapsed;
+      });
+    }
+
+    void _maximize() {
+      setState(() {
+        _inspectorCollapsed = false;
+        _inspectorTop = safeTopMin;
+        _inspectorHeight = screenH - safeTopMin - bottomMargin;
+      });
+    }
+
+    return Positioned(
+      right: 8,
+      top: _inspectorTop,
+      height: panelHeight,
+      child: Material(
+        elevation: 8,
+        borderRadius: BorderRadius.circular(12),
+        color: Colors.white,
+
+        child: Container(
+          width: _kInspectorWidth,
+          padding: panelPadding, // <- changed
+          child: Column(
+            children: [
+              // Fixed-height header so it never grows unexpectedly
+              SizedBox(
+                height: _kInspectorHeaderH,
+                child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onPanStart: (d) {
+                    _inspectorDragStartDy = d.globalPosition.dy;
+                    _inspectorStartTop = _inspectorTop;
+                  },
+                  onPanUpdate: (d) {
+                    if (_inspectorDragStartDy == null || _inspectorStartTop == null) return;
+                    final dy = d.globalPosition.dy - _inspectorDragStartDy!;
+                    final newTop = _inspectorStartTop! + dy;
+                    final currentHeight = _inspectorCollapsed ? collapsedHeight : _inspectorHeight;
+                    final maxTopNow = screenH - currentHeight - bottomMargin;
+                    setState(() => _inspectorTop = newTop.clamp(safeTopMin, maxTopNow));
+                  },
+                  child: Row(
+                    children: [
+                      const Icon(Icons.drag_handle),
+                      const SizedBox(width: 8),
+                      const Expanded(
+                        child: Text('Layers', style: TextStyle(fontWeight: FontWeight.w700), overflow: TextOverflow.ellipsis),
+                      ),
+                      IconButton(
+                        tooltip: _inspectorCollapsed ? 'Expand' : 'Collapse',
+                        icon: Icon(_inspectorCollapsed ? Icons.unfold_more : Icons.unfold_less),
+                        onPressed: () => setState(() => _inspectorCollapsed = !_inspectorCollapsed),
+                      ),
+                      IconButton(
+                        tooltip: 'Maximize',
+                        icon: const Icon(Icons.open_in_full),
+                        onPressed: () {
+                          setState(() {
+                            _inspectorCollapsed = false;
+                            _inspectorTop = safeTopMin;
+                            _inspectorHeight = screenH - safeTopMin - bottomMargin;
+                          });
+                        },
+                      ),
+                      IconButton(
+                        tooltip: 'Close',
+                        icon: const Icon(Icons.close),
+                        onPressed: () => setState(() => _showLayerPanel = false),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+
+              // Only show divider/content when expanded
+              if (!_inspectorCollapsed)
+                const Divider(height: 1),
+
+              if (!_inspectorCollapsed)
+                Expanded(
+                  child: Stack(
+                    children: [
+                      ReorderableListView.builder(
+                        buildDefaultDragHandles: false,
+                        padding: const EdgeInsets.symmetric(vertical: 8),
+                        itemCount: displayOrder.length,
+                        onReorder: (oldDisplay, newDisplay) {
+                          setState(() {
+                            final len = currentElements.length;
+
+                            // Convert "display row" to actual backing index
+                            final oldIdx = len - 1 - oldDisplay;
+                            int newIdx = len - 1 - newDisplay;
+                            if (newDisplay > oldDisplay) newIdx += 1;
+                            newIdx = newIdx.clamp(0, currentElements.length);
+
+                            // Preserve selection by IDs
+                            final selectedIds = _selected
+                                .map((i) => currentElements[i].id)
+                                .toSet();
+
+                            final movedEl = currentElements.removeAt(oldIdx);
+                            final movedKey = elementKeys.removeAt(oldIdx);
+                            currentElements.insert(newIdx, movedEl);
+                            elementKeys.insert(newIdx, movedKey);
+
+                            // Rebuild selection set after reorder
+                            _selected.clear();
+                            for (int i = 0; i < currentElements.length; i++) {
+                              if (selectedIds.contains(currentElements[i].id)) {
+                                _selected.add(i);
+                              }
+                            }
+                            _resetGroupOverlayRect();
+                          });
+                        },
+                        itemBuilder: (ctx, displayIndex) {
+                          final idx = displayOrder[displayIndex];
+                          final el = currentElements[idx];
+                          final selected = _selected.contains(idx);
+                          final hidden = _isHiddenIdx(idx);
+                          final locked = _isLockedIdx(idx);
+
+                          return Container(
+                            key: ValueKey(el.id),
+                            margin: const EdgeInsets.symmetric(vertical: 4),
+                            decoration: BoxDecoration(
+                              color: selected
+                                  ? Colors.blue.withOpacity(0.08)
+                                  : Colors.white,
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(
+                                  color:
+                                  selected ? Colors.blue : Colors.black12),
+                            ),
+                            child: ListTile(
+                              dense: true,
+                              contentPadding:
+                              const EdgeInsets.symmetric(horizontal: 8),
+                              leading: ReorderableDragStartListener(
+                                index: displayIndex,
+                                child: const Icon(Icons.drag_indicator),
+                              ),
+                              title: Text(
+                                _layerTitle(el, idx),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              subtitle: Text(
+                                '${el.type}  ·  ${el.width.toInt()}×${el.height.toInt()}',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(fontSize: 12),
+                              ),
+                              onTap: () {
+                                setState(() {
+                                  if (_multiSelectMode) {
+                                    if (_selected.contains(idx)) {
+                                      _selected.remove(idx);
+                                    } else {
+                                      _selected.add(idx);
+                                    }
+                                  } else {
+                                    _selected
+                                      ..clear()
+                                      ..add(idx);
+                                  }
+                                });
+                                _resetGroupOverlayRect();
+                              },
+                              trailing: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  IconButton(
+                                    tooltip: hidden ? 'Show' : 'Hide',
+                                    icon: Icon(hidden
+                                        ? Icons.visibility_off
+                                        : Icons.visibility),
+                                    onPressed: () => _toggleVisibleById(el.id),
+                                  ),
+                                  IconButton(
+                                    tooltip: locked ? 'Unlock' : 'Lock',
+                                    icon: Icon(
+                                        locked ? Icons.lock : Icons.lock_open),
+                                    onPressed: () => _toggleLockById(el.id),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+
+                      Align(
+                        alignment: Alignment.bottomCenter,
+                        child: GestureDetector(
+                          behavior: HitTestBehavior.opaque,
+                          onPanStart: (d) {
+                            _resizeDragStartDy = d.globalPosition.dy;
+                            _inspectorStartHeight = _inspectorHeight;
+                          },
+                          onPanUpdate: (d) {
+                            if (_resizeDragStartDy == null || _inspectorStartHeight == null) return;
+                            final dy = d.globalPosition.dy - _resizeDragStartDy!;
+                            final newH = (_inspectorStartHeight! + dy).clamp(
+                              _kInspectorHeaderH + 120,
+                              screenH - _inspectorTop - bottomMargin,
+                            );
+                            setState(() => _inspectorHeight = newH);
+                          },
+                          child: Container(
+                            height: 10,
+                            width: double.infinity,
+                            alignment: Alignment.center,
+                            child: const Icon(Icons.drag_handle, size: 16),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+            ],
+          ),
+        ),
+
+      ),
+    );
+  }
+
+
+
+/*
   Widget _buildLayerEditorPanel() {
     // Show top-most first
     final displayOrder =
@@ -2547,6 +2850,7 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
       ),
     );
   }
+*/
 }
 
 /*class PanelEditScreen extends StatefulWidget {
