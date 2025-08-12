@@ -373,77 +373,51 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
   }
 
 
+  bool _pointHitsAnyElement(Offset p) {
+    // check topmost first (last drawn wins)
+    for (int i = currentElements.length - 1; i >= 0; i--) {
+      if (_isHiddenIdx(i)) continue;
+      final e = currentElements[i];
+      final rect = Rect.fromLTWH(e.offset.dx, e.offset.dy, e.width, e.height);
+      if (rect.contains(p)) return true;
+    }
+    return false;
+  }
+
   // ====== UI ======
 
   @override
   Widget build(BuildContext context) {
     final w = widget.panelSize.width;
     final h = widget.panelSize.height;
+
     return WillPopScope(
-      onWillPop: _onWillPop, // <— NEW
+      onWillPop: _onWillPop,
       child: Scaffold(
         appBar: AppBar(
           title: const Text('Edit'),
           backgroundColor: Colors.blue.shade400,
           foregroundColor: Colors.white,
           actions: [
-            // Toggle multi-select
-            /* IconButton(
-            tooltip: _multiSelectMode ? 'Exit Multi-select' : 'Multi-select',
-            icon: Icon(_multiSelectMode ? Icons.check_box : Icons.check_box_outline_blank),
-            onPressed: () {
-              setState(() {
-                _multiSelectMode = !_multiSelectMode;
-                if (!_multiSelectMode && _selected.length > 1) {
-                  // collapse to last tapped if needed
-                  final keep = _selected.isNotEmpty ? _selected.last : null;
-                  _selected.clear();
-                  if (keep != null) _selected.add(keep);
-                }
-              });
-            },
-          ),*/
-
-            /* // Group / Ungroup
-          IconButton(
-            tooltip: 'Group',
-            icon: const Icon(Icons.merge_type),
-            onPressed: _hasMultiSelection ? _groupSelected : null,
-          ),
-          IconButton(
-            tooltip: 'Ungroup',
-            icon: const Icon(Icons.call_split),
-            onPressed: _hasSelection ? _ungroupSelected : null,
-          ),*/
-
-            /* // Copy / Paste now support multi
-          IconButton(icon: const Icon(Icons.copy), onPressed: _copySelection),
-          IconButton(icon: const Icon(Icons.content_paste), onPressed: _pasteSelection),
-*/
-            // Quick undo: remove last element (kept from yours)
-
             IconButton(
               tooltip: _showLayerPanel ? 'Hide Layers' : 'Layers',
               icon: Icon(Icons.layers,
                   color: _showLayerPanel ? Colors.amberAccent : Colors.white),
-              onPressed: () =>
-                  setState(() => _showLayerPanel = !_showLayerPanel),
+              onPressed: () => setState(() => _showLayerPanel = !_showLayerPanel),
             ),
-
             IconButton(
               icon: const Icon(Icons.undo),
               onPressed: _isSaving
                   ? null
                   : () {
-                      if (currentElements.isNotEmpty &&
-                          elementKeys.isNotEmpty) {
-                        setState(() {
-                          currentElements.removeLast();
-                          elementKeys.removeLast();
-                          _clearSelection();
-                        });
-                      }
-                    },
+                if (currentElements.isNotEmpty && elementKeys.isNotEmpty) {
+                  setState(() {
+                    currentElements.removeLast();
+                    elementKeys.removeLast();
+                    _clearSelection();
+                  });
+                }
+              },
             ),
             ElevatedButton(
               onPressed: _isSaving ? null : _savePanel,
@@ -453,79 +427,90 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
               ),
               child: _isSaving
                   ? const SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                      ),
-                    )
+                width: 16,
+                height: 16,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                ),
+              )
                   : const Text('Save Panel'),
             ),
             const SizedBox(width: 8),
-
             _buildPanelOverflowMenu(),
           ],
         ),
-        body: Stack(
-          clipBehavior: Clip.hardEdge,
-          children: [
-            Column(
-              children: [
-                Expanded(
-                  child: Center(
-                    child: AspectRatio(
-                      aspectRatio: w / h,
-                      child: Container(
-                        margin: const EdgeInsets.symmetric(
-                            horizontal: 16, vertical: 10),
-                        decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(10)),
-                        child: ClipRRect(
-                          borderRadius: BorderRadius.circular(20),
-                          child: RepaintBoundary(
-                            key: _panelContentKey,
-                            child: Container(
-                              color: _selectedBackgroundColor,
-                              child: Stack(
-                                clipBehavior: Clip.hardEdge,
-                                children: [
-                                  if (_isEditing)
-                                    CustomPaint(
-                                        size: Size.infinite,
-                                        painter: GridPainter()),
-                                  if (isDrawing)
-                                    Positioned.fill(
-                                      child: DrawingCanvas(
-                                        tool: currentTool,
-                                        brushSize: selectedBrushSize,
-                                        color: drawSelectedColor,
-                                        onDrawingComplete: _onDrawingComplete,
+
+        // NEW: wrap the whole body so we can clear selection on any screen tap
+        body: GestureDetector(
+          behavior: HitTestBehavior.translucent,
+          onTapDown: (details) {
+            // Locate the canvas (the RepaintBoundary content)
+            final box = _panelContentKey.currentContext?.findRenderObject() as RenderBox?;
+            if (box == null) return;
+
+            final canvasRect = box.localToGlobal(Offset.zero) & box.size;
+
+            // Only clear when tap is inside the canvas and not on an element
+            if (canvasRect.contains(details.globalPosition)) {
+              final local = box.globalToLocal(details.globalPosition);
+              _lastTapLocal = local; // keep for paste
+              if (!isDrawing && !_pointHitsAnyElement(local)) {
+                if (_selected.isNotEmpty) {
+                  setState(() {
+                    _selected.clear();
+                    _resetGroupOverlayRect();
+                  });
+                }
+              }
+            }
+          },
+
+          child: Stack(
+            clipBehavior: Clip.hardEdge,
+            children: [
+              Column(
+                children: [
+                  Expanded(
+                    child: Center(
+                      child: AspectRatio(
+                        aspectRatio: w / h,
+                        child: Container(
+                          margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                          decoration: BoxDecoration(borderRadius: BorderRadius.circular(10)),
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(20),
+                            child: RepaintBoundary(
+                              key: _panelContentKey,
+                              child: Container(
+                                color: _selectedBackgroundColor,
+                                child: Stack(
+                                  clipBehavior: Clip.hardEdge,
+                                  children: [
+                                    if (_isEditing)
+                                      CustomPaint(size: Size.infinite, painter: GridPainter()),
+                                    if (isDrawing)
+                                      Positioned.fill(
+                                        child: DrawingCanvas(
+                                          tool: currentTool,
+                                          brushSize: selectedBrushSize,
+                                          color: drawSelectedColor,
+                                          onDrawingComplete: _onDrawingComplete,
+                                        ),
                                       ),
-                                    ),
-                                  for (int i = 0;
-                                      i < currentElements.length;
-                                      i++)
-                                    _buildElementWidget(currentElements[i], i),
-
-                                  if (currentElements.isEmpty)
-                                    const Center(
-                                      child: Text(
-                                        'No elements added yet.\nUse the tools below to add content.',
-                                        textAlign: TextAlign.center,
-                                        style: TextStyle(
-                                            fontSize: 16, color: Colors.grey),
+                                    for (int i = 0; i < currentElements.length; i++)
+                                      _buildElementWidget(currentElements[i], i),
+                                    if (currentElements.isEmpty)
+                                      const Center(
+                                        child: Text(
+                                          'No elements added yet.\nUse the tools below to add content.',
+                                          textAlign: TextAlign.center,
+                                          style: TextStyle(fontSize: 16, color: Colors.grey),
+                                        ),
                                       ),
-                                    ),
-
-                                  // === NEW: group overlay (shows only when multiple are selected)
-/*
-                                  if (_hasMultiSelection) _buildGroupOverlay(),
-*/
-                                  if (_hasMultiUnlocked) _buildGroupOverlay(),
-
-
-                                ],
+                                    if (_hasMultiUnlocked) _buildGroupOverlay(),
+                                  ],
+                                ),
                               ),
                             ),
                           ),
@@ -533,19 +518,18 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
                       ),
                     ),
                   ),
-                ),
+                  // Footer toolbar
+                  _buildToolOptions(),
+                ],
+              ),
 
-                // Footer toolbar
-                _buildToolOptions(),
-              ],
-            ),
+              // Floating toolbox for single selection only
+              if (_singleSelectedIndex != null)
+                _buildFloatingToolbox(currentElements[_singleSelectedIndex!]),
 
-            // Floating toolbox for single selection only
-            if (_singleSelectedIndex != null)
-              _buildFloatingToolbox(currentElements[_singleSelectedIndex!]),
-
-            if (_showLayerPanel) _buildLayerEditorPanel(),
-          ],
+              if (_showLayerPanel) _buildLayerEditorPanel(),
+            ],
+          ),
         ),
       ),
     );
