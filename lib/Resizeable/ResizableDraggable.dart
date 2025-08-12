@@ -13,6 +13,9 @@ class ResizableDraggable extends StatefulWidget {
   final double maxHeight;
   final bool isSelected;
 
+  /// NEW: parent handles removal
+  final VoidCallback? onDelete;
+
   const ResizableDraggable({
     super.key,
     required this.child,
@@ -25,6 +28,7 @@ class ResizableDraggable extends StatefulWidget {
     this.maxWidth = double.infinity,
     this.maxHeight = double.infinity,
     this.isSelected = false,
+    this.onDelete,
   });
 
   @override
@@ -46,7 +50,7 @@ class ResizableDraggableState extends State<ResizableDraggable> {
     height = widget.size.height;
   }
 
-  // === NEW: external control API ===
+  // === external control API ===
   void externalUpdate({Offset? position, Size? size, bool notify = false}) {
     if (!mounted) return;
     setState(() {
@@ -84,7 +88,6 @@ class ResizableDraggableState extends State<ResizableDraggable> {
             left += details.delta.dx;
             top  += details.delta.dy;
           });
-          // notify continuously so parent state (selection bounds / overlay) stays in sync
           widget.onPositionChanged?.call(position, size);
         },
         onPanEnd: (_) {
@@ -94,10 +97,42 @@ class ResizableDraggableState extends State<ResizableDraggable> {
           width: width,
           height: height,
           child: Stack(
+            clipBehavior: Clip.none, // <<< allow delete chip to sit slightly outside
             children: [
               Positioned.fill(child: widget.child),
 
-              // resize handle (only when selected)
+              // === NEW: Delete button (top-right) ===
+              if (widget.isSelected && widget.onDelete != null)
+                Positioned(
+                  // put slightly outside; set to 4,4 to keep inside
+                  top: -20,
+                  right: -12,
+                  child: Material(
+                    color: Colors.transparent,
+                    child: InkWell(
+                      customBorder: const CircleBorder(),
+                      onTap: widget.onDelete,
+                      child: Container(
+                        width: 35,
+                        height: 35,
+                        decoration: BoxDecoration(
+                          color: Colors.redAccent,
+                          shape: BoxShape.circle,
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withOpacity(0.15),
+                              blurRadius: 4,
+                              offset: const Offset(0, 2),
+                            ),
+                          ],
+                        ),
+                        child: const Icon(Icons.close, size: 16, color: Colors.white),
+                      ),
+                    ),
+                  ),
+                ),
+
+              // resize handle (bottom-right) — only when selected
               if (widget.isSelected)
                 Align(
                   alignment: Alignment.bottomRight,

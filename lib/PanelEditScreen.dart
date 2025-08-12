@@ -60,6 +60,8 @@ class PanelEditScreen extends StatefulWidget {
 }
 
 class _PanelEditScreenState extends State<PanelEditScreen> {
+
+  int selectedIndex = -1;
   late ComicPanel panel;
   List<GlobalKey<ResizableDraggableState>> elementKeys = [];
   List<PanelElementModel> currentElements = [];
@@ -584,6 +586,7 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
 
 
   /// Build each element with selection logic updated for multi-select / grouping
+/*
   Widget _buildElementWidget(PanelElementModel element, int index) {
     if (_isHiddenIdx(index)) return const SizedBox.shrink();
 
@@ -882,6 +885,7 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
               });
             }
           },
+          onDelete: () => _deleteElementById(currentElements[index].id), // <— by ID, not index
           child: GestureDetector(
             onTapDown: (d) => _lastTapLocal = d.localPosition,
             onTap: () {
@@ -901,6 +905,7 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
                 _selectOnly(index);
               }
             },
+
             onDoubleTap: () => _editElement(index),
             child: Container(
               decoration: BoxDecoration(
@@ -923,6 +928,346 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
     }
 
   }
+*/
+
+  // Helper to keep keys list in sync and avoid RangeError
+  GlobalKey<ResizableDraggableState> _ensureKeyFor(int i) {
+    if (i < elementKeys.length) return elementKeys[i];
+    final k = GlobalKey<ResizableDraggableState>();
+    elementKeys.add(k);
+    return k;
+  }
+
+  Widget _buildElementWidget(PanelElementModel element, int index) {
+    if (_isHiddenIdx(index)) return const SizedBox.shrink();
+
+    // ------- build inner child by type -------
+    Widget child;
+    switch (element.type) {
+      case 'character':
+      case 'clipart':
+        child = SizedBox(
+          width: element.width,
+          height: element.height,
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(5),
+            child: FittedBox(
+              fit: BoxFit.contain,
+              child: Image.asset(
+                element.value,
+                errorBuilder: (context, error, stackTrace) => Container(
+                  width: element.width,
+                  height: element.height,
+                  color: Colors.grey[300],
+                  child: const Icon(Icons.broken_image, color: Colors.grey),
+                ),
+              ),
+            ),
+          ),
+        );
+        break;
+
+      case 'text':
+        child = Container(
+          width: element.width,
+          height: element.height,
+          alignment: Alignment.center,
+          child: Text(
+            element.value,
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontSize: element.fontSize ?? 16,
+              color: element.color ?? Colors.black,
+              fontFamily: element.fontFamily,
+              fontWeight: element.fontWeight ?? FontWeight.normal,
+              fontStyle: element.fontStyle ?? FontStyle.normal,
+            ),
+          ),
+        );
+        break;
+
+      case 'speech_bubble': {
+        final isSelected = _selected.contains(index);
+        final img = _buildImageElement(element);
+        final decorated = Container(
+          decoration: BoxDecoration(
+            border: isSelected ? Border.all(color: Colors.blue, width: 2) : null,
+          ),
+          child: img,
+        );
+
+        if (!_isEditing) {
+          return Positioned(
+            top: element.offset.dy,
+            left: element.offset.dx,
+            child: SizedBox(width: element.width, height: element.height, child: img),
+          );
+        }
+
+        final locked = _isLockedIdx(index);
+        if (locked) {
+          return Positioned(
+            top: element.offset.dy,
+            left: element.offset.dx,
+            child: SizedBox(width: element.width, height: element.height, child: decorated),
+          );
+        }
+
+        // Interactive with delete
+        final key = _ensureKeyFor(index);
+        return ResizableDraggable(
+          key: key,
+          isSelected: isSelected,
+          size: Size(element.width, element.height),
+          initialTop: element.offset.dy,
+          initialLeft: element.offset.dx,
+          minWidth: 10,
+          minHeight: 10,
+          onPositionChanged: (pos, size) {
+            if (!mounted) return;
+            setState(() {
+              currentElements[index] = currentElements[index].copyWith(
+                offset: pos,
+                size: size,
+                width: size.width,
+                height: size.height,
+              );
+            });
+          },
+          onDelete: () => _deleteElementById(element.id), // <<< NEW
+          child: GestureDetector(
+            onTapDown: (d) => _lastTapLocal = d.localPosition,
+            onTap: () {
+              final el = currentElements[index];
+              if (!_multiSelectMode && el.groupId != null) {
+                final gid = el.groupId;
+                final indices = <int>[];
+                for (int i = 0; i < currentElements.length; i++) {
+                  if (currentElements[i].groupId == gid) indices.add(i);
+                }
+                setState(() {
+                  _selected..clear()..addAll(indices);
+                });
+              } else if (_multiSelectMode) {
+                _toggleSelect(index);
+              } else {
+                _selectOnly(index);
+              }
+            },
+            onDoubleTap: () => _editElement(index),
+            child: decorated,
+          ),
+        );
+      }
+
+      case 'image':
+        child = SizedBox(
+          width: element.width,
+          height: element.height,
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(5),
+            child: FittedBox(
+              fit: BoxFit.contain,
+              child: Image.file(
+                File(element.value),
+                errorBuilder: (context, error, stackTrace) => Container(
+                  width: element.width,
+                  height: element.height,
+                  color: Colors.grey[300],
+                  child: const Icon(Icons.broken_image, color: Colors.grey),
+                ),
+              ),
+            ),
+          ),
+        );
+        break;
+
+      case 'Draw': {
+        final points = element.value.split(';').map((pair) {
+          final coords = pair.split(',');
+          return Offset(
+            double.tryParse(coords[0]) ?? 0,
+            double.tryParse(coords[1]) ?? 0,
+          );
+        }).toList();
+
+        final drawingWidget = CustomPaint(
+          painter: DrawingElementPainter(
+            points: points,
+            color: element.color ?? Colors.black,
+            strokeWidth: element.fontSize ?? 1.0,
+          ),
+        );
+
+        final isSelected = _selected.contains(index);
+        final decoratedChild = Container(
+          decoration: BoxDecoration(
+            border: isSelected ? Border.all(color: Colors.blue, width: 2) : null,
+          ),
+          child: drawingWidget,
+        );
+
+        if (!_isEditing) {
+          return Positioned(
+            top: element.offset.dy,
+            left: element.offset.dx,
+            child: SizedBox(width: element.width, height: element.height, child: drawingWidget),
+          );
+        }
+
+        final locked = _isLockedIdx(index);
+        if (locked) {
+          return Positioned(
+            top: element.offset.dy,
+            left: element.offset.dx,
+            child: SizedBox(width: element.width, height: element.height, child: decoratedChild),
+          );
+        }
+
+        final key = _ensureKeyFor(index);
+        return ResizableDraggable(
+          key: key,
+          isSelected: isSelected,
+          size: Size(element.width, element.height),
+          initialTop: element.offset.dy,
+          initialLeft: element.offset.dx,
+          onPositionChanged: (position, size) {
+            if (!mounted) return;
+            setState(() {
+              currentElements[index] = currentElements[index].copyWith(
+                offset: position,
+                size: size,
+                width: size.width,
+                height: size.height,
+              );
+            });
+          },
+          onDelete: () => _deleteElementById(element.id), // <<< NEW
+          child: GestureDetector(
+            onTapDown: (d) => _lastTapLocal = d.localPosition,
+            onTap: () {
+              final el = currentElements[index];
+              if (!_multiSelectMode && el.groupId != null) {
+                final gid = el.groupId;
+                final indices = <int>[];
+                for (int i = 0; i < currentElements.length; i++) {
+                  if (currentElements[i].groupId == gid) indices.add(i);
+                }
+                setState(() {
+                  _selected..clear()..addAll(indices);
+                });
+              } else if (_multiSelectMode) {
+                _toggleSelect(index);
+              } else {
+                _selectOnly(index);
+              }
+            },
+            onDoubleTap: () => _editElement(index),
+            child: decoratedChild,
+          ),
+        );
+      }
+
+      default:
+        child = Container(
+          width: element.width,
+          height: element.height,
+          color: Colors.red.withOpacity(0.3),
+          child: Center(
+            child: Text('Unknown: ${element.type}', style: const TextStyle(fontSize: 12)),
+          ),
+        );
+    }
+
+    // ------- standard wrapper for character/clipart/text/image -------
+    final isSelected = _selected.contains(index);
+    final elementSize = Size(
+      element.width > 0 ? element.width : 50,
+      element.height > 0 ? element.height : 50,
+    );
+
+    if (!_isEditing) {
+      return Positioned(
+        top: element.offset.dy,
+        left: element.offset.dx,
+        child: SizedBox(width: element.width, height: element.height, child: child),
+      );
+    }
+
+    final locked = _isLockedIdx(index);
+    if (locked) {
+      return Positioned(
+        top: element.offset.dy,
+        left: element.offset.dx,
+        child: SizedBox(
+          width: elementSize.width,
+          height: elementSize.height,
+          child: Container(
+            decoration: BoxDecoration(
+              border: Border.all(
+                color: isSelected ? Colors.blue : Colors.transparent,
+                width: 2,
+              ),
+            ),
+            child: child,
+          ),
+        ),
+      );
+    }
+
+    // Interactive + delete
+    final key = _ensureKeyFor(index);
+    return ResizableDraggable(
+      key: key,
+      isSelected: isSelected,
+      size: elementSize,
+      initialTop: element.offset.dy,
+      initialLeft: element.offset.dx,
+      onPositionChanged: (position, size) {
+        if (!mounted) return;
+        setState(() {
+          currentElements[index] = currentElements[index].copyWith(
+            offset: position,
+            size: size,
+            width: size.width,
+            height: size.height,
+          );
+        });
+      },
+      onDelete: () => _deleteElementById(element.id), // <<< NEW
+      child: GestureDetector(
+        onTapDown: (d) => _lastTapLocal = d.localPosition,
+        onTap: () {
+          final el = currentElements[index];
+          if (!_multiSelectMode && el.groupId != null) {
+            final gid = el.groupId;
+            final indices = <int>[];
+            for (int i = 0; i < currentElements.length; i++) {
+              if (currentElements[i].groupId == gid) indices.add(i);
+            }
+            setState(() {
+              _selected..clear()..addAll(indices);
+            });
+          } else if (_multiSelectMode) {
+            _toggleSelect(index);
+          } else {
+            _selectOnly(index);
+          }
+        },
+        onDoubleTap: () => _editElement(index),
+        child: Container(
+          decoration: BoxDecoration(
+            border: Border.all(
+              color: isSelected ? Colors.blue : Colors.transparent,
+              width: 2,
+            ),
+          ),
+          child: child,
+        ),
+      ),
+    );
+  }
+
 
   // === Group overlay (a single ResizableDraggable controlling the selection)
   Widget _buildGroupOverlay() {
@@ -1461,6 +1806,29 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
       _selected.remove(index);
     });
   }*/
+
+
+ /* void _deleteElementById(String id) {
+    final idx = currentElements.indexWhere((e) => e.id == id);
+    if (idx < 0) return; // already gone
+
+    setState(() {
+      currentElements.removeAt(idx);
+      if (idx < elementKeys.length) elementKeys.removeAt(idx);
+
+      // clamp selection
+      if (selectedIndex >= currentElements.length) {
+        selectedIndex = currentElements.isEmpty ? -1 : currentElements.length - 1;
+      }
+    });
+  }*/
+
+// Safe getter anywhere you read elements[selectedIndex]
+  PanelElementModel? get _selectedElement =>
+      (selectedIndex >= 0 && selectedIndex < currentElements.length)
+          ? currentElements[selectedIndex]
+          : null;
+
 
   void _deleteElementById(String id) {
     final index = currentElements.indexWhere((e) => e.id == id);
