@@ -44,8 +44,9 @@ class Project {
 
 class LayoutPanel {
   final String id;
-  final double width;
-  final double height;
+  final String? label;
+  double width;
+  double height;
   double x;
   double y;
   String? customText;
@@ -55,6 +56,7 @@ class LayoutPanel {
 
   LayoutPanel({
     required this.id,
+    this.label = null,
     required this.width,
     required this.height,
     this.x = 0,
@@ -67,6 +69,7 @@ class LayoutPanel {
 
   LayoutPanel copyWith({
     String? id,
+    String? label,
     double? width,
     double? height,
     double? x,
@@ -78,12 +81,14 @@ class LayoutPanel {
   }) {
     return LayoutPanel(
       id: id ?? this.id,
+      label: label ?? this.label,
       width: width ?? this.width,
       height: height ?? this.height,
       x: x ?? this.x,
       y: y ?? this.y,
       customText: customText ?? this.customText,
-      elements: elements ?? List<PanelElementModel>.from(this.elements), // Deep copy
+      elements: elements ?? List<PanelElementModel>.from(this.elements),
+      // Deep copy
       backgroundColor: backgroundColor ?? this.backgroundColor,
       previewImage: previewImage ?? this.previewImage,
     );
@@ -109,6 +114,8 @@ class LayoutPanel {
         color: element.color,
         fontSize: element.fontSize,
         fontFamily: element.fontFamily,
+        meta: element.meta,                  // <-- PRESERVE meta (contains hidden flag)
+
       );
     }).toList();
 
@@ -136,4 +143,6 @@ class LayoutPanel {
     print('Updated panel elements count: ${updatedPanel.elements.length}');
     return updatedPanel;
   }
+
+
 }

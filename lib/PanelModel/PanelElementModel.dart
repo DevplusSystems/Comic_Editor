@@ -2,12 +2,12 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'dart:typed_data';
-import '../SpeechDialog/SpeechBubbleComponents.dart';
-import '../SpeechDialog/SpeechBubbleData.dart';
+
+import '../SpeechDrag/DragSpeechBubbleData.dart';
 class PanelElementModel {
   final String id;
   final String type; // e.g., "text", "draw", "speech_bubble"
-  final String value; // for speech bubble: JSON-encoded SpeechBubbleData
+  final String value; // e.g., JSON-encoded SpeechBubbleData or base64 PNG
   final double width;
   final double height;
   final Offset offset;
@@ -18,6 +18,11 @@ class PanelElementModel {
   final bool locked;
   final FontWeight? fontWeight;
   final FontStyle? fontStyle;
+  final String? meta; //
+  final String? groupId; // <-- NEW
+  final bool hidden; // <— NEW (defaults to false)
+
+
 
   const PanelElementModel({
     required this.id,
@@ -33,7 +38,14 @@ class PanelElementModel {
     this.locked = false,
     this.fontWeight,
     this.fontStyle,
+    this.meta, // <-- NEW
+    this.groupId,
+    this.hidden = false,
+
   });
+
+  static const _unset = Object(); // sentinel
+
 
   PanelElementModel copyWith({
     String? id,
@@ -49,6 +61,10 @@ class PanelElementModel {
     bool? locked,
     FontWeight? fontWeight,
     FontStyle? fontStyle,
+    String? meta, // <-- NEW
+    Object? groupId = _unset,
+    bool? hidden, // <— NEW
+
   }) {
     return PanelElementModel(
       id: id ?? this.id,
@@ -64,6 +80,9 @@ class PanelElementModel {
       locked: locked ?? this.locked,
       fontWeight: fontWeight ?? this.fontWeight,
       fontStyle: fontStyle ?? this.fontStyle,
+      meta: meta ?? this.meta, // <-- NEW
+      groupId: identical(groupId, _unset) ? this.groupId : groupId as String?,
+      hidden: hidden ?? this.hidden,
     );
   }
 
@@ -84,10 +103,24 @@ class PanelElementModel {
       'locked': locked,
       'fontWeight': fontWeight?.index,
       'fontStyle': fontStyle?.index,
+      'meta': meta, // <-- NEW
+      'groupId': groupId,
+      'hidden': hidden, // <- persisted
+
     };
   }
 
+
+
   factory PanelElementModel.fromMap(Map<String, dynamic> map) {
+
+    bool _readHidden(dynamic v) {
+      if (v is bool) return v;
+      if (v is num) return v != 0;
+      if (v is String) return v.toLowerCase() == 'true';
+      return false;
+    }
+
     return PanelElementModel(
       id: map['id'] ?? '',
       type: map['type'] ?? '',
@@ -114,14 +147,16 @@ class PanelElementModel {
       fontStyle: map['fontStyle'] != null
           ? FontStyle.values[map['fontStyle']]
           : null,
+      meta: map['meta'], // <-- NEW
+      groupId: map['groupId'] as String?,
+      hidden: map['hidden'] ?? false, // <- read persisted hidden state
     );
   }
 
-  // If this is a speech bubble, decode its value
-  SpeechBubbleData? get speechBubbleData {
+  DragSpeechBubbleData? get speechBubbleData {
     if (type != 'speech_bubble') return null;
     try {
-      return SpeechBubbleData.fromMap(jsonDecode(value));
+      return DragSpeechBubbleData.fromMap(jsonDecode(value));
     } catch (_) {
       return null;
     }
