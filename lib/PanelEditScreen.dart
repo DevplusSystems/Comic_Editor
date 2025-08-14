@@ -406,6 +406,7 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
     final w = widget.panelSize.width;
     final h = widget.panelSize.height;
 
+
     return WillPopScope(
       onWillPop: _onWillPop,
       child: Scaffold(
