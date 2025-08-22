@@ -3,6 +3,233 @@ import 'package:flutter/cupertino.dart';
 import 'DragSpeechBubbleComponents.dart';
 import 'DragSpeechBubbleData.dart';
 
+
+class SpeechBubblePainterWithText extends CustomPainter {
+  final DragSpeechBubbleData d;
+  final TextStyle Function(DragSpeechBubbleData) textStyleFor;
+  SpeechBubblePainterWithText(this.d, {required this.textStyleFor});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    // Prevent any pixel from drawing outside the preview rect
+    canvas.save();
+    canvas.clipRect(Offset.zero & size);
+
+    final paintFill = Paint()
+      ..color = d.bubbleColor
+      ..style = PaintingStyle.fill
+      ..isAntiAlias = true;
+
+    final paintBorder = Paint()
+      ..color = d.borderColor
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = d.borderWidth
+      ..isAntiAlias = true;
+
+    const double margin = 40;
+    const double bubbleHeight = 120;
+    const double bubbleWidthMargin = 50;
+    const double tailBaseWidth = 20;
+
+    // Space around bubble for tail
+    const double kTailPlay = 10.0;
+
+    // Bubble bounds
+    final double left   = bubbleWidthMargin + kTailPlay;
+    final double right  = size.width - bubbleWidthMargin - kTailPlay;
+    final double top    = margin + kTailPlay * 0.4;
+    final double bottom = top + bubbleHeight;
+
+    final Rect bubbleRect = Rect.fromLTRB(left, top, right, bottom);
+
+    // Distances to decide which edge is closest
+    final dTop    = (d.tailOffset.dy - top).abs();
+    final dBottom = (d.tailOffset.dy - bottom).abs();
+    final dLeft   = (d.tailOffset.dx - left).abs();
+    final dRight  = (d.tailOffset.dx - right).abs();
+
+    final path = Path();
+    switch (d.bubbleShape) {
+      case DragBubbleShape.rectangle:
+        _drawRectangleBubble(
+          dTop, dBottom, dLeft, dRight, tailBaseWidth, path,
+          left, top, right, bottom, size, // pass size
+        );
+        break;
+      case DragBubbleShape.shout:
+        _drawShoutBubble(path, size, left, top, right, bottom);
+        break;
+    }
+
+    canvas.drawPath(path, paintFill);
+    if (d.borderWidth > 0) canvas.drawPath(path, paintBorder);
+
+    // Draw centered text
+    final Rect textRect = bubbleRect.deflate(d.padding);
+    if (d.text.isNotEmpty && textRect.width > 0 && textRect.height > 0) {
+      final tp = TextPainter(
+        text: TextSpan(
+          text: d.text,
+          style: textStyleFor(d),
+        ),
+        textDirection: TextDirection.ltr,
+        textAlign: TextAlign.center,
+      )..layout(minWidth: textRect.width, maxWidth: textRect.width);
+
+      tp.paint(
+        canvas,
+        Offset(
+          textRect.left + (textRect.width - tp.width) / 2,
+          textRect.top  + (textRect.height - tp.height) / 2,
+        ),
+      );
+    }
+
+    canvas.restore();
+  }
+
+  void _drawShoutBubble(
+      Path path,
+      Size size,
+      double left,
+      double top,
+      double right,
+      double bottom,
+      ) {
+    final double w = size.width, h = size.height;
+    const double margin = 12.0, scale = 0.8;
+    final double usableW = w - 2 * margin, usableH = h - 2 * margin;
+    final double bubbleW = usableW * scale, bubbleH = usableH * scale;
+    final double offsetX = (w - bubbleW) / 2, offsetY = (h - bubbleH) / 2;
+
+    final List<Offset> relativePoints = [
+      const Offset(0.10, 0.30), const Offset(0.15, 0.10), const Offset(0.25, 0.28),
+      const Offset(0.35, 0.08), const Offset(0.42, 0.25), const Offset(0.52, 0.05),
+      const Offset(0.60, 0.22), const Offset(0.70, 0.02), const Offset(0.75, 0.20),
+      const Offset(0.88, 0.05), const Offset(0.90, 0.25), const Offset(0.98, 0.18),
+      const Offset(0.95, 0.38), const Offset(1.00, 0.45), const Offset(0.90, 0.52),
+      const Offset(0.95, 0.60), const Offset(0.85, 0.65), const Offset(0.98, 0.75),
+      const Offset(0.80, 0.78), const Offset(0.90, 0.90), const Offset(0.75, 0.88),
+      const Offset(0.78, 1.00), const Offset(0.65, 0.90), const Offset(0.60, 0.98),
+      const Offset(0.52, 0.85), const Offset(0.45, 1.00), const Offset(0.40, 0.83),
+      const Offset(0.30, 0.95), const Offset(0.32, 0.75), const Offset(0.25, 0.88),
+      const Offset(0.20, 0.75), const Offset(0.12, 0.90), const Offset(0.15, 0.70),
+      const Offset(0.05, 0.72), const Offset(0.08, 0.60), const Offset(0.00, 0.50),
+      const Offset(0.10, 0.45), const Offset(0.00, 0.38), const Offset(0.08, 0.32),
+    ];
+
+    final points = relativePoints
+        .map((p) => Offset(offsetX + p.dx * bubbleW, offsetY + p.dy * bubbleH))
+        .toList();
+
+    path.moveTo(points.first.dx, points.first.dy);
+    for (int i = 1; i < points.length; i++) {
+      path.lineTo(points[i].dx, points[i].dy);
+    }
+    path.close();
+  }
+
+  void _drawRectangleBubble(
+      double dTop,
+      double dBottom,
+      double dLeft,
+      double dRight,
+      double tailBaseWidth,
+      Path path,
+      double left,
+      double top,
+      double right,
+      double bottom,
+      Size size, // <-- added
+      ) {
+    if (dTop <= dBottom && dTop <= dLeft && dTop <= dRight) {
+      // TOP
+      final cx = d.tailOffset.dx.clamp(left + tailBaseWidth / 2, right - tailBaseWidth / 2);
+      final baseLeft  = Offset(cx - tailBaseWidth / 2, top);
+      final baseRight = Offset(cx + tailBaseWidth / 2, top);
+
+      path
+        ..moveTo(baseLeft.dx, baseLeft.dy)
+        ..lineTo(d.tailOffset.dx, d.tailOffset.dy)
+        ..lineTo(baseRight.dx, baseRight.dy)
+        ..lineTo(right, top)
+        ..lineTo(right, bottom)
+        ..lineTo(left, bottom)
+        ..lineTo(left, top)
+        ..close();
+
+    } else if (dBottom <= dLeft && dBottom <= dRight) {
+      // BOTTOM
+      final cx = d.tailOffset.dx.clamp(left + tailBaseWidth / 2, right - tailBaseWidth / 2);
+      final baseLeft  = Offset(cx - tailBaseWidth / 2, bottom);
+      final baseRight = Offset(cx + tailBaseWidth / 2, bottom);
+
+      path
+        ..moveTo(left, top)
+        ..lineTo(right, top)
+        ..lineTo(right, bottom)
+        ..lineTo(baseRight.dx, baseRight.dy)
+        ..lineTo(d.tailOffset.dx, d.tailOffset.dy)
+        ..lineTo(baseLeft.dx, baseLeft.dy)
+        ..lineTo(left, bottom)
+        ..close();
+
+    } else if (dLeft <= dRight) {
+      // LEFT
+      final cy = d.tailOffset.dy.clamp(top + tailBaseWidth / 2, bottom - tailBaseWidth / 2);
+      final baseTop    = Offset(left, cy - tailBaseWidth / 2);
+      final baseBottom = Offset(left, cy + tailBaseWidth / 2);
+
+      path
+        ..moveTo(baseTop.dx, baseTop.dy)
+        ..lineTo(d.tailOffset.dx, d.tailOffset.dy)
+        ..lineTo(baseBottom.dx, baseBottom.dy)
+        ..lineTo(left, bottom)
+        ..lineTo(right, bottom)
+        ..lineTo(right, top)
+        ..lineTo(left, top)
+        ..close();
+
+    } else {
+      // RIGHT — keep tip just inside canvas & outside bubble
+      const double minOut = 12.0;                 // tip must be > bubble right
+      const double pad    = 6.0;                  // keep a gap from canvas edge
+      final double hs     = d.borderWidth * 0.5;  // stroke-aware
+
+      final cy = d.tailOffset.dy.clamp(top + tailBaseWidth / 2, bottom - tailBaseWidth / 2);
+      final baseTop    = Offset(right, cy - tailBaseWidth / 2);
+      final baseBottom = Offset(right, cy + tailBaseWidth / 2);
+
+      // Allowed X window for tail tip:
+      double lo = right + minOut;
+      double hi = size.width - pad - hs; // cannot draw beyond this
+
+      if (lo > hi) { // bubble too close to edge; squeeze a safe spot
+        lo = hi;
+      }
+
+      final double tipX = d.tailOffset.dx.clamp(lo, hi);
+      final double tipY = d.tailOffset.dy.clamp(pad + hs, size.height - pad - hs);
+      final Offset tip  = Offset(tipX, tipY);
+
+      path
+        ..moveTo(left, top)
+        ..lineTo(right, top)
+        ..lineTo(baseTop.dx, baseTop.dy)
+        ..lineTo(tip.dx, tip.dy)
+        ..lineTo(baseBottom.dx, baseBottom.dy)
+        ..lineTo(right, bottom)
+        ..lineTo(left, bottom)
+        ..close();
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant SpeechBubblePainterWithText old) => old.d != d;
+}
+
+
+/*
 class SpeechBubblePainterWithText extends CustomPainter {
   final DragSpeechBubbleData d;
 
@@ -222,3 +449,4 @@ class SpeechBubblePainterWithText extends CustomPainter {
   bool shouldRepaint(covariant SpeechBubblePainterWithText old) => old.d != d;
 
 }
+*/

@@ -24,7 +24,7 @@ class DragSpeechBubbleEditDialog extends StatefulWidget {
 class _DragSpeechBubbleEditDialogState
     extends State<DragSpeechBubbleEditDialog> {
   // Keep preview size constant so PNG == preview
-  static const Size _previewSize = Size(300, 260);
+  static const Size _previewSize = Size(600, 260);
 
   // IMPORTANT: must match the painter’s margin.
   static const double kOuterMargin = 10.0;
@@ -144,14 +144,13 @@ class _DragSpeechBubbleEditDialogState
     final Offset handleCenter = _tailOffset + inward * nudge;
 
     return AlertDialog(
-      title: const Text('Edit Speech Bubble'),
+      title: const Text('Speech Bubble'),
       content: SizedBox(
         child: SingleChildScrollView(
           child: Column(
             children: [
               // ==== Preview with draggable tail ====
               SizedBox(
-                width: 500,
                 height: 250,
                 child: Stack(
                   children: [
@@ -175,19 +174,32 @@ class _DragSpeechBubbleEditDialogState
                           fontWeight: _fontWeight,
                           fontStyle: _fontStyle,
                         ),
+                        textStyleFor: (DragSpeechBubbleData) {
+                          return TextStyle(
+                            fontSize: _fontSize,
+                            color: _textColor,
+                            fontFamily: _fontFamily,
+                            fontWeight: _fontWeight,
+                            fontStyle: _fontStyle,
+                          );
+                        },
                       ),
                     ),
 
                     // === Red handle at the *actual tail tip* ===
                     if (_bubbleShape != DragBubbleShape.shout)
                       Positioned(
-                        left: handleCenter.dx - 10,
-                        top: handleCenter.dy - 10,
+                        left: _tailOffset.dx - 10,
+                        top: _tailOffset.dy - 10,
                         child: GestureDetector(
                           onPanUpdate: (details) {
                             setState(() {
-                              final unclamped = _tailOffset + details.delta;
-                              _tailOffset = _clampToRect(unclamped, rect);
+                              // Update tailOffset based on drag
+                              final newOffset = _clampToRect(
+                                _tailOffset + details.delta,
+                                rect,
+                              );
+                              _tailOffset = newOffset;
                             });
                           },
                           child: Container(
@@ -495,7 +507,15 @@ class _DragSpeechBubbleEditDialogState
     // 1) Paint to a big image
     final recorder = ui.PictureRecorder();
     final canvas = Canvas(recorder);
-    final painter = SpeechBubblePainterWithText(data);
+    final painter = SpeechBubblePainterWithText(data, textStyleFor: (DragSpeechBubbleData ) {
+      return TextStyle(
+        fontSize: data.fontSize,
+        color: data.textColor,
+        fontFamily: data.fontFamily,
+        fontWeight: data.fontWeight,
+        fontStyle: data.fontStyle,
+      );
+    });
     painter.paint(canvas, logicalSize);
     final picture = recorder.endRecording();
 

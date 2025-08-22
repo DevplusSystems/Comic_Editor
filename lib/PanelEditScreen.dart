@@ -23,6 +23,7 @@ import 'Resizeable/ResizableDraggable.dart';
 import 'package:flutter/services.dart';
 import 'SpeechDrag/DragSpeechBubbleComponents.dart';
 import 'SpeechDrag/DragSpeechBubbleData.dart';
+import 'SpeechDrag/SpeechBubbleEditorScreen.dart';
 import 'TextEditorDialog/TextEditDialog.dart';
 
 import 'dart:math' as math;
@@ -1331,15 +1332,18 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
     _queueAutosave();
   }
 
-
   Future<void> _editSpeechBubble(int index) async {
     final element = currentElements[index];
-    final initialData = _extractBubbleInitialData(element);
+    final initialData = _extractBubbleInitialData(element); // you already have this
 
-    final result = await showDialog<Map<String, dynamic>>(
-      context: context,
-      builder: (context) =>
-          DragSpeechBubbleEditDialog(initialData: initialData),
+    final result = await Navigator.push<Map<String, dynamic>>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => SpeechBubbleEditorScreen(
+          title: 'Edit Speech Bubble',
+          initialData: initialData,
+        ),
+      ),
     );
     if (result == null) return;
 
@@ -1372,19 +1376,73 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
         width: newW,
         height: newH,
         size: Size(newW, newH),
-        offset: element.offset,
+        offset: element.offset, // keep current placement
         color: updatedBubble.bubbleColor,
         fontSize: updatedBubble.fontSize,
         fontFamily: updatedBubble.fontFamily,
         fontWeight: updatedBubble.fontWeight,
         fontStyle: updatedBubble.fontStyle,
-        meta: jsonEncode({
-          'kind': 'speech_bubble_original',
-          'data': updatedBubble.toMap(),
-        }),
+        meta: jsonEncode({'kind': 'speech_bubble_original', 'data': updatedBubble.toMap()}),
       );
     });
+
+    _queueAutosave(); // keep your autosave flow consistent
   }
+
+
+  // Future<void> _editSpeechBubble(int index) async {
+  //   final element = currentElements[index];
+  //   final initialData = _extractBubbleInitialData(element);
+  //
+  //   final result = await showDialog<Map<String, dynamic>>(
+  //     context: context,
+  //     builder: (context) =>
+  //         DragSpeechBubbleEditDialog(initialData: initialData),
+  //   );
+  //   if (result == null) return;
+  //
+  //   final updatedBubble = DragSpeechBubbleData(
+  //     text: result['text'],
+  //     bubbleColor: result['bubbleColor'],
+  //     borderColor: result['borderColor'],
+  //     borderWidth: (result['borderWidth'] as num).toDouble(),
+  //     bubbleShape: result['bubbleShape'] as DragBubbleShape,
+  //     fontSize: (result['fontSize'] as num).toDouble(),
+  //     textColor: result['textColor'] as Color,
+  //     fontFamily: result['fontFamily'] as String,
+  //     fontWeight: result['fontWeight'] as FontWeight,
+  //     fontStyle: result['fontStyle'] as FontStyle,
+  //     padding: (result['padding'] as num).toDouble(),
+  //     tailOffset: result['tailOffset'] as Offset,
+  //     tailNorm: Offset(
+  //       (result['tailNorm']['dx'] as num).toDouble(),
+  //       (result['tailNorm']['dy'] as num).toDouble(),
+  //     ),
+  //   );
+  //
+  //   final Uint8List pngBytes = result['pngBytes'] as Uint8List;
+  //   final double newW = (result['width'] as num).toDouble();
+  //   final double newH = (result['height'] as num).toDouble();
+  //
+  //   setState(() {
+  //     currentElements[index] = element.copyWith(
+  //       value: base64Encode(pngBytes),
+  //       width: newW,
+  //       height: newH,
+  //       size: Size(newW, newH),
+  //       offset: element.offset,
+  //       color: updatedBubble.bubbleColor,
+  //       fontSize: updatedBubble.fontSize,
+  //       fontFamily: updatedBubble.fontFamily,
+  //       fontWeight: updatedBubble.fontWeight,
+  //       fontStyle: updatedBubble.fontStyle,
+  //       meta: jsonEncode({
+  //         'kind': 'speech_bubble_original',
+  //         'data': updatedBubble.toMap(),
+  //       }),
+  //     );
+  //   });
+  // }
 
   Map<String, dynamic> _extractBubbleInitialData(PanelElementModel element) {
     Map<String, dynamic> fallback = {
@@ -1584,6 +1642,57 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
   }
 
   Future<void> _addSpeechBubble() async {
+    final result = await Navigator.push<Map<String, dynamic>>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => const SpeechBubbleEditorScreen(
+          title: 'Add Speech Bubble',
+          // You can pass custom initialData here if you want
+        ),
+      ),
+    );
+    if (result == null) return;
+
+    final bytes = result['pngBytes'] as Uint8List;
+    final width = (result['width'] as num).toDouble();
+    final height = (result['height'] as num).toDouble();
+
+    final bubbleData = DragSpeechBubbleData(
+      text: result['text'],
+      bubbleColor: result['bubbleColor'],
+      borderColor: result['borderColor'],
+      borderWidth: (result['borderWidth'] as num).toDouble(),
+      bubbleShape: result['bubbleShape'] as DragBubbleShape,
+      fontSize: (result['fontSize'] as num).toDouble(),
+      textColor: result['textColor'] as Color,
+      fontFamily: result['fontFamily'] as String,
+      fontWeight: result['fontWeight'] as FontWeight,
+      fontStyle: result['fontStyle'] as FontStyle,
+      padding: (result['padding'] as num).toDouble(),
+      tailOffset: result['tailOffset'] as Offset,
+      tailNorm: Offset(
+        (result['tailNorm']['dx'] as num).toDouble(),
+        (result['tailNorm']['dy'] as num).toDouble(),
+      ),
+    );
+
+    final newElement = PanelElementModel(
+      id: DateTime.now().millisecondsSinceEpoch.toString(),
+      type: 'speech_bubble',
+      value: base64Encode(bytes),
+      offset: const Offset(50, 50),
+      width: width,
+      height: height,
+      size: Size(width, height),
+      meta: jsonEncode({'kind': 'speech_bubble_original', 'data': bubbleData.toMap()}),
+    );
+
+    _addNewElement(newElement);
+  }
+
+
+/*
+  Future<void> _addSpeechBubble() async {
     final result = await showDialog<Map<String, dynamic>>(
       context: context,
       builder: (context) => DragSpeechBubbleEditDialog(
@@ -1642,6 +1751,7 @@ class _PanelEditScreenState extends State<PanelEditScreen> {
 
     _addNewElement(newElement);
   }
+*/
 
   Future<Uint8List?> _capturePanelAsImage() async {
     try {
